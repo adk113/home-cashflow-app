@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
-import { Category, AccountingActivity, TransactionType } from '../types/transaction';
+import { Category, AccountingActivity, TransactionType, Currency } from '../types/transaction';
 import { getActivityConfig } from '../utils/formatters';
 import { getTodayIso } from '../utils/dateFilters';
 
@@ -21,6 +21,7 @@ interface TransactionModalProps {
   visible: boolean;
   initialType?: TransactionType;
   categories: Category[];
+  currency?: Currency;
   onClose: () => void;
   onSave: (data: {
     amount: number;
@@ -36,6 +37,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   visible,
   initialType = 'expense',
   categories,
+  currency,
   onClose,
   onSave,
 }) => {
@@ -162,7 +164,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
             {/* Amount Field */}
             <View style={styles.amountFieldWrap}>
-              <Text style={styles.dollarSymbol}>$</Text>
+              <Text style={styles.dollarSymbol}>{currency?.symbol || '$'}</Text>
               <TextInput
                 style={styles.amountInput}
                 keyboardType="numeric"

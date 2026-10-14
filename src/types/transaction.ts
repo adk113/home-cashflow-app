@@ -4,6 +4,12 @@ export type TransactionType = 'income' | 'expense';
 
 export type PeriodFilter = 'daily' | 'weekly' | 'monthly' | 'annually';
 
+export interface Currency {
+  code: string;
+  symbol: string;
+  name: string;
+}
+
 export interface Category {
   id: string;
   name: string;

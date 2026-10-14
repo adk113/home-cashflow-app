@@ -19,6 +19,7 @@ import { CashFlowStatementView } from './src/components/CashFlowStatementView';
 import { VisualReportsView } from './src/components/VisualReportsView';
 import { TransactionList } from './src/components/TransactionList';
 import { TransactionModal } from './src/components/TransactionModal';
+import { CurrencyModal } from './src/components/CurrencyModal';
 import { calculateCategoryBreakdown } from './src/utils/accounting';
 import { formatCurrency, getActivityConfig } from './src/utils/formatters';
 
@@ -32,6 +33,8 @@ function MainScreen() {
     filteredTransactions,
     categories,
     categoriesMap,
+    currency,
+    setCurrency,
     isLoading,
     addTransaction,
     deleteTransaction,
@@ -41,6 +44,7 @@ function MainScreen() {
   const [activeTab, setActiveTab] = useState<TabKey>('dashboard');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [modalInitialType, setModalInitialType] = useState<'income' | 'expense'>('expense');
+  const [currencyModalVisible, setCurrencyModalVisible] = useState<boolean>(false);
 
   // Compute category breakdowns for visual reports
   const expenseCategories = useMemo(
@@ -84,12 +88,25 @@ function MainScreen() {
         </View>
 
         <View style={styles.headerRight}>
+          {/* Currency Switcher Pill */}
+          <TouchableOpacity
+            style={styles.currencyBtn}
+            onPress={() => setCurrencyModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <View style={styles.currSymbolCircle}>
+              <Text style={styles.currSymbolText}>{currency.symbol}</Text>
+            </View>
+            <Text style={styles.currCodeText}>{currency.code}</Text>
+            <Ionicons name="chevron-down" size={12} color={Colors.textSecondary} style={{ marginLeft: 2 }} />
+          </TouchableOpacity>
+
           <TouchableOpacity
             style={styles.resetBtn}
             onPress={resetToSampleData}
           >
-            <Ionicons name="reload-outline" size={14} color={Colors.textSecondary} style={{ marginRight: 4 }} />
-            <Text style={styles.resetBtnText}>Demo Data</Text>
+            <Ionicons name="reload-outline" size={13} color={Colors.textSecondary} style={{ marginRight: 3 }} />
+            <Text style={styles.resetBtnText}>Demo</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -102,7 +119,7 @@ function MainScreen() {
         {activeTab === 'dashboard' && (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
             {/* Net Balance & Income/Expense Hero */}
-            <NetBalanceHero metrics={metrics} onOpenAddModal={openAddModal} />
+            <NetBalanceHero metrics={metrics} currency={currency} onOpenAddModal={openAddModal} />
 
             {/* Accounting 3-Pillar Quick Summary */}
             <View style={styles.summarySection}>
@@ -117,7 +134,7 @@ function MainScreen() {
                       { color: metrics.cashFlow.netOperating >= 0 ? Colors.inflow : Colors.outflow },
                     ]}
                   >
-                    {formatCurrency(metrics.cashFlow.netOperating, true)}
+                    {formatCurrency(metrics.cashFlow.netOperating, currency, true)}
                   </Text>
                   <Text style={styles.tileDesc}>Living Expenses</Text>
                 </View>
@@ -131,7 +148,7 @@ function MainScreen() {
                       { color: metrics.cashFlow.netInvesting >= 0 ? Colors.inflow : Colors.outflow },
                     ]}
                   >
-                    {formatCurrency(metrics.cashFlow.netInvesting, true)}
+                    {formatCurrency(metrics.cashFlow.netInvesting, currency, true)}
                   </Text>
                   <Text style={styles.tileDesc}>Home & Savings</Text>
                 </View>
@@ -145,7 +162,7 @@ function MainScreen() {
                       { color: metrics.cashFlow.netFinancing >= 0 ? Colors.inflow : Colors.outflow },
                     ]}
                   >
-                    {formatCurrency(metrics.cashFlow.netFinancing, true)}
+                    {formatCurrency(metrics.cashFlow.netFinancing, currency, true)}
                   </Text>
                   <Text style={styles.tileDesc}>Mortgage & Loans</Text>
                 </View>
@@ -187,7 +204,7 @@ function MainScreen() {
                           { color: isIncome ? Colors.inflow : Colors.textPrimary },
                         ]}
                       >
-                        {formatCurrency(tx.amount, true)}
+                        {formatCurrency(tx.amount, currency, true)}
                       </Text>
                       <View style={[styles.miniActBadge, { backgroundColor: actConfig.badgeBg }]}>
                         <Text style={[styles.miniActText, { color: actConfig.color }]}>
@@ -302,8 +319,17 @@ function MainScreen() {
         visible={modalVisible}
         initialType={modalInitialType}
         categories={categories}
+        currency={currency}
         onClose={() => setModalVisible(false)}
         onSave={addTransaction}
+      />
+
+      {/* Select Currency Modal */}
+      <CurrencyModal
+        visible={currencyModalVisible}
+        selectedCurrency={currency}
+        onSelect={setCurrency}
+        onClose={() => setCurrencyModalVisible(false)}
       />
     </SafeAreaView>
   );
@@ -367,6 +393,36 @@ const styles = StyleSheet.create({
   headerRight: {
     flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+  },
+  currencyBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  currSymbolCircle: {
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    backgroundColor: Colors.primaryMuted,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 5,
+  },
+  currSymbolText: {
+    fontSize: 11,
+    fontWeight: '800',
+    color: Colors.primary,
+  },
+  currCodeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textPrimary,
   },
   resetBtn: {
     flexDirection: 'row',

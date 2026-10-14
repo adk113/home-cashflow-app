@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { Transaction, Category } from '../types/transaction';
 import { formatCurrency, formatDatePretty, getActivityConfig } from '../utils/formatters';
+import { useTransactions } from '../context/TransactionContext';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -29,6 +30,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   onAddNew,
   periodLabel,
 }) => {
+  const { currency } = useTransactions();
   const [searchTerm, setSearchTerm] = useState<string>('');
 
   const filtered = transactions.filter((tx) => {
@@ -43,13 +45,13 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     const cat = categoriesMap.get(tx.categoryId);
     const name = cat?.name || 'this transaction';
     if (Platform.OS === 'web') {
-      if (confirm(`Are you sure you want to delete ${name} (${formatCurrency(tx.amount)})?`)) {
+      if (confirm(`Are you sure you want to delete ${name} (${formatCurrency(tx.amount, currency)})?`)) {
         onDeleteTransaction(tx.id);
       }
     } else {
       Alert.alert(
         'Delete Transaction',
-        `Are you sure you want to delete ${name} (${formatCurrency(tx.amount)})?`,
+        `Are you sure you want to delete ${name} (${formatCurrency(tx.amount, currency)})?`,
         [
           { text: 'Cancel', style: 'cancel' },
           {
@@ -105,7 +107,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
               { color: isIncome ? Colors.inflow : Colors.textPrimary },
             ]}
           >
-            {formatCurrency(item.amount, true)}
+            {formatCurrency(item.amount, currency, true)}
           </Text>
           <TouchableOpacity
             style={styles.deleteBtn}

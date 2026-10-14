@@ -1,32 +1,54 @@
-import { AccountingActivity } from '../types/transaction';
+import { AccountingActivity, Currency } from '../types/transaction';
+import { DEFAULT_CURRENCY } from './currencies';
 
-export function formatCurrency(amount: number, showSign: boolean = false): string {
+export function formatCurrency(
+  amount: number,
+  currencyOrShowSign?: Currency | boolean,
+  showSignIfCurrency?: boolean
+): string {
+  let currency: Currency = DEFAULT_CURRENCY;
+  let showSign = false;
+
+  if (typeof currencyOrShowSign === 'boolean') {
+    showSign = currencyOrShowSign;
+  } else if (currencyOrShowSign && typeof currencyOrShowSign === 'object') {
+    currency = currencyOrShowSign;
+    showSign = Boolean(showSignIfCurrency);
+  }
+
   const isNegative = amount < 0;
   const abs = Math.abs(amount);
-  const formatted = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(abs);
+
+  let formattedNumber = '';
+  try {
+    formattedNumber = new Intl.NumberFormat('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(abs);
+  } catch {
+    formattedNumber = abs.toFixed(2);
+  }
+
+  const formattedWithSymbol = `${currency.symbol}${formattedNumber}`;
 
   if (showSign) {
-    if (amount > 0) return `+${formatted}`;
-    if (amount < 0) return `-${formatted}`;
+    if (amount > 0) return `+${formattedWithSymbol}`;
+    if (amount < 0) return `-${formattedWithSymbol}`;
   }
-  return isNegative ? `-${formatted}` : formatted;
+  return isNegative ? `-${formattedWithSymbol}` : formattedWithSymbol;
 }
 
-export function formatCompactCurrency(amount: number): string {
+export function formatCompactCurrency(amount: number, currency: Currency = DEFAULT_CURRENCY): string {
   const abs = Math.abs(amount);
   const sign = amount < 0 ? '-' : '';
+  const sym = currency.symbol;
   if (abs >= 1000000) {
-    return `${sign}$${(abs / 1000000).toFixed(1)}M`;
+    return `${sign}${sym}${(abs / 1000000).toFixed(1)}M`;
   }
   if (abs >= 1000) {
-    return `${sign}$${(abs / 1000).toFixed(1)}k`;
+    return `${sign}${sym}${(abs / 1000).toFixed(1)}k`;
   }
-  return `${sign}$${abs.toFixed(0)}`;
+  return `${sign}${sym}${abs.toFixed(0)}`;
 }
 
 export function formatDatePretty(dateStr: string): string {

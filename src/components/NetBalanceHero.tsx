@@ -3,14 +3,15 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { formatCurrency } from '../utils/formatters';
-import { DashboardMetrics } from '../types/transaction';
+import { DashboardMetrics, Currency } from '../types/transaction';
 
 interface NetBalanceHeroProps {
   metrics: DashboardMetrics;
+  currency?: Currency;
   onOpenAddModal: (type: 'income' | 'expense') => void;
 }
 
-export const NetBalanceHero: React.FC<NetBalanceHeroProps> = ({ metrics, onOpenAddModal }) => {
+export const NetBalanceHero: React.FC<NetBalanceHeroProps> = ({ metrics, currency, onOpenAddModal }) => {
   const isPositive = metrics.netBalance >= 0;
 
   return (
@@ -32,7 +33,7 @@ export const NetBalanceHero: React.FC<NetBalanceHeroProps> = ({ metrics, onOpenA
             { color: isPositive ? Colors.inflow : Colors.outflow },
           ]}
         >
-          {formatCurrency(metrics.netBalance, true)}
+          {formatCurrency(metrics.netBalance, currency, true)}
         </Text>
         <Text style={styles.balanceSubtext}>
           {isPositive ? 'Surplus liquid cash flow' : 'Deficit (Outflows exceed inflows)'}
@@ -49,7 +50,7 @@ export const NetBalanceHero: React.FC<NetBalanceHeroProps> = ({ metrics, onOpenA
             <Text style={styles.flowLabel}>Total Inflow</Text>
           </View>
           <Text style={[styles.flowAmount, { color: Colors.inflow }]}>
-            {formatCurrency(metrics.totalInflows)}
+            {formatCurrency(metrics.totalInflows, currency)}
           </Text>
         </View>
 
@@ -61,7 +62,7 @@ export const NetBalanceHero: React.FC<NetBalanceHeroProps> = ({ metrics, onOpenA
             <Text style={styles.flowLabel}>Total Outflow</Text>
           </View>
           <Text style={[styles.flowAmount, { color: Colors.outflow }]}>
-            {formatCurrency(metrics.totalOutflows)}
+            {formatCurrency(metrics.totalOutflows, currency)}
           </Text>
         </View>
       </View>

@@ -1,13 +1,18 @@
 import React, { createContext, useContext, useState, useEffect, useMemo, useCallback } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   Transaction,
   Category,
   PeriodFilter,
   DashboardMetrics,
+  Currency,
 } from '../types/transaction';
 import { TransactionDao } from '../db/transactionDao';
 import { calculateDashboardMetrics } from '../utils/accounting';
 import { filterTransactionsByPeriod } from '../utils/dateFilters';
+import { DEFAULT_CURRENCY } from '../utils/currencies';
+
+const CURRENCY_STORAGE_KEY = '@cashflow_selected_currency_v1';
 
 interface TransactionContextType {
   transactions: Transaction[];
@@ -17,6 +22,8 @@ interface TransactionContextType {
   setPeriod: (period: PeriodFilter) => void;
   filteredTransactions: Transaction[];
   metrics: DashboardMetrics;
+  currency: Currency;
+  setCurrency: (currency: Currency) => Promise<void>;
   isLoading: boolean;
   addTransaction: (data: {
     amount: number;
@@ -38,24 +45,38 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [period, setPeriod] = useState<PeriodFilter>('monthly');
+  const [currency, setCurrencyState] = useState<Currency>(DEFAULT_CURRENCY);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
       await TransactionDao.init();
-      const [cats, txs] = await Promise.all([
+      const [cats, txs, savedCurr] = await Promise.all([
         TransactionDao.getCategories(),
         TransactionDao.getTransactions(),
+        AsyncStorage.getItem(CURRENCY_STORAGE_KEY),
       ]);
       setCategories(cats);
       setTransactions(txs);
+      if (savedCurr) {
+        try {
+          setCurrencyState(JSON.parse(savedCurr));
+        } catch {
+          setCurrencyState(DEFAULT_CURRENCY);
+        }
+      }
     } catch (err) {
       console.error('Error loading transaction data:', err);
     } finally {
       setIsLoading(false);
     }
   }, []);
+
+  const setCurrency = async (newCurr: Currency) => {
+    setCurrencyState(newCurr);
+    await AsyncStorage.setItem(CURRENCY_STORAGE_KEY, JSON.stringify(newCurr));
+  };
 
   useEffect(() => {
     loadData();
@@ -130,6 +151,8 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         setPeriod,
         filteredTransactions,
         metrics,
+        currency,
+        setCurrency,
         isLoading,
         addTransaction,
         updateTransaction,

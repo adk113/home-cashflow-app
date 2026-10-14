@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { CashFlowStatement, CategoryBreakdownItem } from '../types/transaction';
 import { formatCurrency } from '../utils/formatters';
+import { useTransactions } from '../context/TransactionContext';
 
 interface VisualReportsViewProps {
   statement: CashFlowStatement;
@@ -18,6 +19,7 @@ export const VisualReportsView: React.FC<VisualReportsViewProps> = ({
   expenseCategories,
   incomeCategories,
 }) => {
+  const { currency } = useTransactions();
   const [activeTab, setActiveTab] = useState<'expenses' | 'income'>('expenses');
 
   // Compute maximum amount for comparative inflow/outflow bar chart
@@ -52,7 +54,7 @@ export const VisualReportsView: React.FC<VisualReportsViewProps> = ({
           <View style={styles.labelCol}>
             <Text style={styles.flowBarLabel}>Inflows</Text>
             <Text style={[styles.flowBarVal, { color: Colors.inflow }]}>
-              {formatCurrency(statement.totalInflows)}
+              {formatCurrency(statement.totalInflows, currency)}
             </Text>
           </View>
           <View style={styles.barTrack}>
@@ -64,7 +66,7 @@ export const VisualReportsView: React.FC<VisualReportsViewProps> = ({
           <View style={styles.labelCol}>
             <Text style={styles.flowBarLabel}>Outflows</Text>
             <Text style={[styles.flowBarVal, { color: Colors.outflow }]}>
-              {formatCurrency(statement.totalOutflows)}
+              {formatCurrency(statement.totalOutflows, currency)}
             </Text>
           </View>
           <View style={styles.barTrack}>
@@ -86,7 +88,7 @@ export const VisualReportsView: React.FC<VisualReportsViewProps> = ({
                 : '0%'}
             </Text>
           </Text>
-          <Text style={styles.netCashLabel}>{formatCurrency(statement.netCashFlow, true)}</Text>
+          <Text style={styles.netCashLabel}>{formatCurrency(statement.netCashFlow, currency, true)}</Text>
         </View>
       </View>
 
@@ -162,7 +164,7 @@ export const VisualReportsView: React.FC<VisualReportsViewProps> = ({
                     </Text>
                   </View>
                 </View>
-                <Text style={styles.catAmount}>{formatCurrency(item.totalAmount)}</Text>
+                <Text style={styles.catAmount}>{formatCurrency(item.totalAmount, currency)}</Text>
               </View>
 
               {/* Progress bar */}

@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { CashFlowStatement, AccountingActivity } from '../types/transaction';
 import { formatCurrency, getActivityConfig } from '../utils/formatters';
+import { useTransactions } from '../context/TransactionContext';
 
 interface CashFlowStatementViewProps {
   statement: CashFlowStatement;
@@ -14,6 +15,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
   statement,
   periodLabel,
 }) => {
+  const { currency } = useTransactions();
   const [expandedSection, setExpandedSection] = useState<AccountingActivity | null>('operating');
 
   const toggleSection = (section: AccountingActivity) => {
@@ -60,14 +62,14 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
           <View style={styles.summaryItem}>
             <Text style={styles.summaryItemLabel}>Inflow (+)</Text>
             <Text style={[styles.summaryItemValue, { color: Colors.inflow }]}>
-              {formatCurrency(inflows)}
+              {formatCurrency(inflows, currency)}
             </Text>
           </View>
           <View style={styles.verticalDivider} />
           <View style={styles.summaryItem}>
             <Text style={styles.summaryItemLabel}>Outflow (-)</Text>
             <Text style={[styles.summaryItemValue, { color: Colors.outflow }]}>
-              {formatCurrency(outflows)}
+              {formatCurrency(outflows, currency)}
             </Text>
           </View>
           <View style={styles.verticalDivider} />
@@ -79,7 +81,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
                 { color: isNetPositive ? Colors.inflow : Colors.outflow, fontWeight: '700' },
               ]}
             >
-              {formatCurrency(net, true)}
+              {formatCurrency(net, currency, true)}
             </Text>
           </View>
         </View>
@@ -111,7 +113,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
                       ]}
                     >
                       {isItemIncome ? '+' : '-'}
-                      {formatCurrency(item.amount)}
+                      {formatCurrency(item.amount, currency)}
                     </Text>
                   </View>
                 );
@@ -179,7 +181,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
                 { color: statement.netOperating >= 0 ? Colors.inflow : Colors.outflow },
               ]}
             >
-              {formatCurrency(statement.netOperating, true)}
+              {formatCurrency(statement.netOperating, currency, true)}
             </Text>
           </View>
           <Text style={styles.mathSymbol}>+</Text>
@@ -191,7 +193,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
                 { color: statement.netInvesting >= 0 ? Colors.inflow : Colors.outflow },
               ]}
             >
-              {formatCurrency(statement.netInvesting, true)}
+              {formatCurrency(statement.netInvesting, currency, true)}
             </Text>
           </View>
           <Text style={styles.mathSymbol}>+</Text>
@@ -203,7 +205,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
                 { color: statement.netFinancing >= 0 ? Colors.inflow : Colors.outflow },
               ]}
             >
-              {formatCurrency(statement.netFinancing, true)}
+              {formatCurrency(statement.netFinancing, currency, true)}
             </Text>
           </View>
         </View>
@@ -216,7 +218,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
               { color: statement.netCashFlow >= 0 ? Colors.inflow : Colors.outflow },
             ]}
           >
-            {formatCurrency(statement.netCashFlow, true)}
+            {formatCurrency(statement.netCashFlow, currency, true)}
           </Text>
         </View>
       </View>
