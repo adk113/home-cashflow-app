@@ -40,11 +40,22 @@ const server = http.createServer((req, res) => {
       res.writeHead(500, { 'Content-Type': 'text/plain' });
       res.end('500 - Internal Server Error');
     } else {
+      let finalContent = content;
+      if (ext === '.html') {
+        let htmlStr = content.toString('utf8');
+        if (!htmlStr.includes('apple-mobile-web-app-capable')) {
+          htmlStr = htmlStr.replace(
+            '<head>',
+            '<head>\n    <meta name="apple-mobile-web-app-capable" content="yes" />\n    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />\n    <meta name="apple-mobile-web-app-title" content="Home CashFlow" />\n    <link rel="apple-touch-icon" href="/favicon.png" />'
+          );
+          finalContent = Buffer.from(htmlStr, 'utf8');
+        }
+      }
       res.writeHead(200, {
         'Content-Type': contentType,
         'Cache-Control': ext === '.html' ? 'no-cache' : 'public, max-age=31536000',
       });
-      res.end(content);
+      res.end(finalContent);
     }
   });
 });
