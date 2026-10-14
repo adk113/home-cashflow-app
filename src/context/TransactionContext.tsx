@@ -12,6 +12,8 @@ import { calculateDashboardMetrics } from '../utils/accounting';
 import { filterTransactionsByPeriod } from '../utils/dateFilters';
 import { DEFAULT_CURRENCY } from '../utils/currencies';
 
+import { useAuth } from './AuthContext';
+
 const CURRENCY_STORAGE_KEY = '@cashflow_selected_currency_v1';
 
 interface TransactionContextType {
@@ -88,13 +90,22 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return map;
   }, [categories]);
 
+  const { currentUser } = useAuth();
+
+  const userScopedTransactions = useMemo(() => {
+    if (!currentUser) return transactions;
+    return transactions.filter(
+      (tx) => !tx.userId || tx.userId === currentUser.id || tx.userId === 'user_family'
+    );
+  }, [transactions, currentUser]);
+
   const { filtered: filteredTransactions } = useMemo(() => {
-    return filterTransactionsByPeriod(transactions, period);
-  }, [transactions, period]);
+    return filterTransactionsByPeriod(userScopedTransactions, period);
+  }, [userScopedTransactions, period]);
 
   const metrics = useMemo(() => {
-    return calculateDashboardMetrics(transactions, categoriesMap, period);
-  }, [transactions, categoriesMap, period]);
+    return calculateDashboardMetrics(userScopedTransactions, categoriesMap, period);
+  }, [userScopedTransactions, categoriesMap, period]);
 
   const addTransaction = async (data: {
     amount: number;
@@ -106,6 +117,7 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
   }) => {
     const newTx: Transaction = {
       id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+      userId: currentUser?.id || 'user_aditya',
       amount: data.amount,
       type: data.type,
       activity: data.activity,

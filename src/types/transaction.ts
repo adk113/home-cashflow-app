@@ -10,6 +10,15 @@ export interface Currency {
   name: string;
 }
 
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  avatar: string;
+  pin: string;
+  role?: 'primary' | 'member';
+}
+
 export interface Category {
   id: string;
   name: string;
@@ -22,6 +31,7 @@ export interface Category {
 
 export interface Transaction {
   id: string;
+  userId?: string;
   amount: number;
   type: TransactionType;
   activity: AccountingActivity;

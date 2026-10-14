@@ -12,7 +12,9 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from './src/theme/colors';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { TransactionProvider, useTransactions } from './src/context/TransactionContext';
+import { AuthScreen } from './src/screens/AuthScreen';
 import { PeriodSelector } from './src/components/PeriodSelector';
 import { NetBalanceHero } from './src/components/NetBalanceHero';
 import { CashFlowStatementView } from './src/components/CashFlowStatementView';
@@ -26,6 +28,7 @@ import { formatCurrency, getActivityConfig } from './src/utils/formatters';
 type TabKey = 'dashboard' | 'cashflow' | 'reports' | 'transactions';
 
 function MainScreen() {
+  const { currentUser, logout } = useAuth();
   const {
     period,
     setPeriod,
@@ -83,7 +86,9 @@ function MainScreen() {
           </View>
           <View>
             <Text style={styles.brandTitle}>Home CashFlow</Text>
-            <Text style={styles.brandSubtitle}>Household Financial Ledger</Text>
+            <Text style={styles.brandSubtitle}>
+              {currentUser ? `${currentUser.avatar} ${currentUser.name}` : 'Household Ledger'}
+            </Text>
           </View>
         </View>
 
@@ -99,6 +104,16 @@ function MainScreen() {
             </View>
             <Text style={styles.currCodeText}>{currency.code}</Text>
             <Ionicons name="chevron-down" size={12} color={Colors.textSecondary} style={{ marginLeft: 2 }} />
+          </TouchableOpacity>
+
+          {/* User Profile / Switch Account Button */}
+          <TouchableOpacity
+            style={styles.userProfileBtn}
+            onPress={logout}
+            activeOpacity={0.7}
+          >
+            <Text style={{ fontSize: 13, marginRight: 4 }}>{currentUser?.avatar || '👤'}</Text>
+            <Ionicons name="log-out-outline" size={13} color={Colors.textSecondary} />
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -335,11 +350,32 @@ function MainScreen() {
   );
 }
 
+function RootNavigator() {
+  const { isAuthenticated, isLoadingAuth } = useAuth();
+
+  if (isLoadingAuth) {
+    return (
+      <View style={styles.centerContainer}>
+        <ActivityIndicator size="large" color={Colors.primary} />
+        <Text style={styles.loadingText}>Loading Household Session...</Text>
+      </View>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <AuthScreen />;
+  }
+
+  return <MainScreen />;
+}
+
 export default function App() {
   return (
-    <TransactionProvider>
-      <MainScreen />
-    </TransactionProvider>
+    <AuthProvider>
+      <TransactionProvider>
+        <RootNavigator />
+      </TransactionProvider>
+    </AuthProvider>
   );
 }
 
@@ -423,6 +459,16 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '700',
     color: Colors.textPrimary,
+  },
+  userProfileBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
   },
   resetBtn: {
     flexDirection: 'row',
