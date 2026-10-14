@@ -14,8 +14,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
 import { Category, AccountingActivity, TransactionType, Currency } from '../types/transaction';
-import { getActivityConfig } from '../utils/formatters';
+import { formatDatePretty, getActivityConfig } from '../utils/formatters';
 import { getTodayIso } from '../utils/dateFilters';
+import { DatePickerModal } from './DatePickerModal';
 
 interface TransactionModalProps {
   visible: boolean;
@@ -46,6 +47,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [selectedCatId, setSelectedCatId] = useState<string>('');
   const [activity, setActivity] = useState<AccountingActivity>('operating');
   const [dateStr, setDateStr] = useState<string>(getTodayIso());
+  const [calendarVisible, setCalendarVisible] = useState<boolean>(false);
   const [notes, setNotes] = useState<string>('');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
@@ -229,23 +231,42 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               })}
             </View>
 
-            {/* Date Input */}
-            <Text style={styles.sectionLabel}>Date (YYYY-MM-DD)</Text>
+            {/* Date Picker Button with Calendar Popup */}
+            <Text style={styles.sectionLabel}>Date</Text>
             <View style={styles.dateRow}>
-              <TextInput
-                style={styles.dateInput}
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor={Colors.textMuted}
-                value={dateStr}
-                onChangeText={setDateStr}
-              />
+              <TouchableOpacity
+                style={styles.datePickerBtn}
+                onPress={() => setCalendarVisible(true)}
+                activeOpacity={0.75}
+              >
+                <View style={styles.dateIconCircle}>
+                  <Ionicons name="calendar" size={16} color={Colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.datePickerText}>{formatDatePretty(dateStr)}</Text>
+                  <Text style={styles.dateSubtext}>{dateStr}</Text>
+                </View>
+                <View style={styles.dateChangeBadge}>
+                  <Text style={styles.dateChangeText}>Calendar</Text>
+                  <Ionicons name="chevron-down" size={12} color={Colors.primary} style={{ marginLeft: 3 }} />
+                </View>
+              </TouchableOpacity>
+
               <TouchableOpacity
                 style={styles.todayBtn}
                 onPress={() => setDateStr(getTodayIso())}
+                activeOpacity={0.75}
               >
                 <Text style={styles.todayBtnText}>Today</Text>
               </TouchableOpacity>
             </View>
+
+            <DatePickerModal
+              visible={calendarVisible}
+              selectedDate={dateStr}
+              onSelectDate={(newDate) => setDateStr(newDate)}
+              onClose={() => setCalendarVisible(false)}
+            />
 
             {/* Notes / Description */}
             <Text style={styles.sectionLabel}>Notes / Vendor (Optional)</Text>
@@ -446,16 +467,48 @@ const styles = StyleSheet.create({
     gap: 10,
     marginBottom: 16,
   },
-  dateInput: {
+  datePickerBtn: {
     flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: Colors.surface,
     borderWidth: 1,
     borderColor: Colors.cardBorder,
-    borderRadius: 10,
-    paddingHorizontal: 14,
+    borderRadius: 12,
+    paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  dateIconCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  datePickerText: {
+    fontSize: 13,
+    fontWeight: '700',
     color: Colors.textPrimary,
-    fontSize: 14,
+  },
+  dateSubtext: {
+    fontSize: 11,
+    color: Colors.textMuted,
+    marginTop: 1,
+  },
+  dateChangeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(56, 189, 248, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  dateChangeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.primary,
   },
   todayBtn: {
     backgroundColor: Colors.primaryMuted,
