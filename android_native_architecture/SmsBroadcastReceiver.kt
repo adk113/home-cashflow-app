@@ -1,0 +1,100 @@
+package com.aditya.homecashflow.sms
+
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.app.PendingIntent
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.os.Build
+import android.provider.Telephony
+import androidx.core.app.NotificationCompat
+import com.aditya.homecashflow.data.local.AppDatabase
+import com.aditya.homecashflow.data.local.PendingSmsEntity
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import java.util.UUID
+
+/**
+ * 2. SMS BROADCAST RECEIVER
+ * Background listener for banking alerts.
+ * Enqueues into PendingSmsQueue instead of auto-committing directly to ledger.
+ */
+class SmsBroadcastReceiver : BroadcastReceiver() {
+
+    override fun onReceive(context: Context, intent: Intent) {
+        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+
+        val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
+        if (messages.isNullOrEmpty()) return
+
+        // Concatenate multi-part SMS if needed
+        val sender = messages[0].displayOriginatingAddress ?: return
+        val fullBody = StringBuilder()
+        for (msg in messages) {
+            fullBody.append(msg.displayMessageBody)
+        }
+        val body = fullBody.toString()
+
+        // Parse banking contents
+        val parsed = SmsTransactionParser.parse(sender, body) ?: return
+
+        // Asynchronously insert into Pending Queue (Room DB) using Coroutines
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val db = AppDatabase.getInstance(context)
+                val entity = PendingSmsEntity(
+                    id = "sms_${UUID.randomUUID()}",
+                    sender = sender,
+                    body = body,
+                    amount = parsed.amount,
+                    type = parsed.type,
+                    activity = parsed.activity,
+                    suggestedCategoryId = parsed.suggestedCategoryId,
+                    sourceAccount = parsed.sourceAccount,
+                    date = parsed.dateIso,
+                    detectedAt = System.currentTimeMillis()
+                )
+
+                db.pendingSmsDao().enqueueSms(entity)
+
+                // Show local review notification to the user
+                showApprovalNotification(context, parsed)
+            } catch (e: Exception) {
+                e.printStackTrace()
+            } finally {
+                pendingResult.finish()
+            }
+        }
+    }
+
+    private fun showApprovalNotification(context: Context, parsed: ParsedBankTransaction) {
+        val channelId = "cashflow_pending_sms"
+        val notificationManager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                channelId,
+                "Bank SMS Approvals",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Alerts when a banking transaction is detected for approval"
+            }
+            notificationManager.createNotificationChannel(channel)
+        }
+
+        val sign = if (parsed.type == "income") "+" else "-"
+        val formattedAmount = String.format("%.2f", parsed.amount)
+
+        val builder = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
+            .setContentTitle("New $sign$formattedAmount from ${parsed.sourceAccount}")
+            .setContentText("Tap to review and approve into Home CashFlow ledger")
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setAutoCancel(true)
+
+        notificationManager.notify((System.currentTimeMillis() % 10000).toInt(), builder.build())
+    }
+}

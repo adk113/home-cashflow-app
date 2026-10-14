@@ -29,6 +29,21 @@ export interface Category {
   isDefault?: boolean;
 }
 
+export type EntryMode = 'MANUAL' | 'AUTOMATED';
+
+export interface PendingSmsTransaction {
+  id: string;
+  sender: string;
+  body: string;
+  amount: number;
+  type: TransactionType;
+  activity: AccountingActivity;
+  suggestedCategoryId: string;
+  sourceAccount: string; // e.g. "HDFC Bank XX12", "SBI UPI", "Cash"
+  date: string; // ISO 'YYYY-MM-DD'
+  detectedAt: number; // Unix timestamp ms
+}
+
 export interface Transaction {
   id: string;
   userId?: string;
@@ -38,6 +53,8 @@ export interface Transaction {
   categoryId: string;
   date: string; // ISO 'YYYY-MM-DD'
   notes?: string;
+  entryMode?: EntryMode; // 'MANUAL' or 'AUTOMATED'
+  sourceAccount?: string; // e.g. 'Cash', 'HDFC Bank XX12', 'SBI'
   createdAt: number; // Unix timestamp ms
 }
 

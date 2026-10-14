@@ -13,14 +13,29 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
-import { Category, AccountingActivity, TransactionType, Currency } from '../types/transaction';
+import { Category, AccountingActivity, TransactionType, Currency, EntryMode } from '../types/transaction';
 import { formatDatePretty, getActivityConfig } from '../utils/formatters';
 import { getTodayIso } from '../utils/dateFilters';
 import { DatePickerModal } from './DatePickerModal';
 
+const COMMON_ACCOUNTS = [
+  { label: '💵 Cash', value: 'Cash' },
+  { label: '🏛️ HDFC', value: 'HDFC Bank' },
+  { label: '🏛️ SBI', value: 'SBI Bank' },
+  { label: '🏛️ ICICI', value: 'ICICI Bank' },
+  { label: '📱 UPI', value: 'UPI / GPay' },
+];
+
 interface TransactionModalProps {
   visible: boolean;
   initialType?: TransactionType;
+  initialAmount?: number;
+  initialCategoryId?: string;
+  initialActivity?: AccountingActivity;
+  initialSourceAccount?: string;
+  initialDate?: string;
+  initialNotes?: string;
+  initialEntryMode?: EntryMode;
   categories: Category[];
   currency?: Currency;
   onClose: () => void;
@@ -31,39 +46,74 @@ interface TransactionModalProps {
     categoryId: string;
     date: string;
     notes?: string;
+    entryMode?: EntryMode;
+    sourceAccount?: string;
   }) => Promise<void>;
 }
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
   visible,
   initialType = 'expense',
+  initialAmount,
+  initialCategoryId,
+  initialActivity,
+  initialSourceAccount = 'Cash',
+  initialDate,
+  initialNotes,
+  initialEntryMode = 'MANUAL',
   categories,
   currency,
   onClose,
   onSave,
 }) => {
   const [type, setType] = useState<TransactionType>(initialType);
-  const [amountStr, setAmountStr] = useState<string>('');
-  const [selectedCatId, setSelectedCatId] = useState<string>('');
-  const [activity, setActivity] = useState<AccountingActivity>('operating');
-  const [dateStr, setDateStr] = useState<string>(getTodayIso());
+  const [amountStr, setAmountStr] = useState<string>(initialAmount ? String(initialAmount) : '');
+  const [selectedCatId, setSelectedCatId] = useState<string>(initialCategoryId || '');
+  const [activity, setActivity] = useState<AccountingActivity>(initialActivity || 'operating');
+  const [sourceAccount, setSourceAccount] = useState<string>(initialSourceAccount || 'Cash');
+  const [entryMode, setEntryMode] = useState<EntryMode>(initialEntryMode || 'MANUAL');
+  const [dateStr, setDateStr] = useState<string>(initialDate || getTodayIso());
   const [calendarVisible, setCalendarVisible] = useState<boolean>(false);
-  const [notes, setNotes] = useState<string>('');
+  const [notes, setNotes] = useState<string>(initialNotes || '');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   // Filter categories by chosen transaction type
   const matchingCategories = categories.filter((c) => c.type === type);
 
   useEffect(() => {
-    setType(initialType);
-    setAmountStr('');
-    setDateStr(getTodayIso());
-    setNotes('');
-  }, [visible, initialType]);
+    if (visible) {
+      setType(initialType);
+      setAmountStr(initialAmount ? String(initialAmount) : '');
+      setDateStr(initialDate || getTodayIso());
+      setNotes(initialNotes || '');
+      setSourceAccount(initialSourceAccount || 'Cash');
+      setEntryMode(initialEntryMode || 'MANUAL');
+
+      if (initialCategoryId) {
+        setSelectedCatId(initialCategoryId);
+        if (initialActivity) {
+          setActivity(initialActivity);
+        }
+      } else if (matchingCategories.length > 0) {
+        setSelectedCatId(matchingCategories[0].id);
+        setActivity(matchingCategories[0].activity);
+      }
+    }
+  }, [
+    visible,
+    initialType,
+    initialAmount,
+    initialCategoryId,
+    initialActivity,
+    initialSourceAccount,
+    initialDate,
+    initialNotes,
+    initialEntryMode,
+  ]);
 
   useEffect(() => {
-    // Select first category by default when matching list updates
-    if (matchingCategories.length > 0) {
+    // If current selected category doesn't match new type, pick the first matching
+    if (!matchingCategories.some((c) => c.id === selectedCatId) && matchingCategories.length > 0) {
       const first = matchingCategories[0];
       setSelectedCatId(first.id);
       setActivity(first.activity);
@@ -104,6 +154,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         categoryId: selectedCatId,
         date: dateStr || getTodayIso(),
         notes: notes.trim(),
+        entryMode,
+        sourceAccount: sourceAccount.trim() || 'Cash',
       });
       onClose();
     } catch (err) {
@@ -124,7 +176,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         <View style={styles.sheetContainer}>
           {/* Header */}
           <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>New Transaction</Text>
+            <View>
+              <Text style={styles.sheetTitle}>
+                {entryMode === 'AUTOMATED' ? 'Review Automated SMS' : 'New Transaction'}
+              </Text>
+              {entryMode === 'AUTOMATED' && (
+                <Text style={styles.sheetSubtitle}>Verified via background bank SMS</Text>
+              )}
+            </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color={Colors.textSecondary} />
             </TouchableOpacity>
@@ -174,14 +233,40 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 placeholderTextColor={Colors.textMuted}
                 value={amountStr}
                 onChangeText={setAmountStr}
-                autoFocus={true}
+                autoFocus={!initialAmount}
               />
             </View>
+
+            {/* Payment Source / Account Selection */}
+            <Text style={styles.sectionLabel}>Source Account / Method</Text>
+            <View style={styles.chipsRow}>
+              {COMMON_ACCOUNTS.map((acc) => {
+                const isSelected = sourceAccount.toLowerCase() === acc.value.toLowerCase();
+                return (
+                  <TouchableOpacity
+                    key={acc.value}
+                    style={[styles.accountChip, isSelected && styles.accountChipSelected]}
+                    onPress={() => setSourceAccount(acc.value)}
+                  >
+                    <Text style={[styles.accountChipText, isSelected && styles.accountChipTextSelected]}>
+                      {acc.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <TextInput
+              style={styles.accountCustomInput}
+              placeholder="Or type custom account (e.g. HDFC A/c XX4521, UPI ID)"
+              placeholderTextColor={Colors.textMuted}
+              value={sourceAccount}
+              onChangeText={setSourceAccount}
+            />
 
             {/* Accounting Activity Classification Badge */}
             <View style={styles.activityCard}>
               <View style={styles.activityCardHeader}>
-                <Text style={styles.activityCardLabel}>Cash Flow Classification:</Text>
+                <Text style={styles.activityCardLabel}>Cash Flow Pillar:</Text>
                 <View style={[styles.actPill, { backgroundColor: actConfig.badgeBg }]}>
                   <Text style={[styles.actPillCode, { color: actConfig.color }]}>
                     {actConfig.code} • {actConfig.label}
@@ -272,7 +357,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <Text style={styles.sectionLabel}>Notes / Vendor (Optional)</Text>
             <TextInput
               style={styles.notesInput}
-              placeholder="e.g. Grocery restock, HVAC maintenance..."
+              placeholder="e.g. Swiggy, Salary payroll, Metro card refill..."
               placeholderTextColor={Colors.textMuted}
               value={notes}
               onChangeText={setNotes}
@@ -285,7 +370,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               disabled={isSubmitting}
             >
               <Text style={styles.saveBtnText}>
-                {isSubmitting ? 'Recording...' : `Record ${type === 'income' ? 'Income' : 'Expense'}`}
+                {isSubmitting
+                  ? 'Recording...'
+                  : entryMode === 'AUTOMATED'
+                  ? `Approve & Record ${type === 'income' ? 'Income' : 'Expense'}`
+                  : `Record Manual ${type === 'income' ? 'Income' : 'Expense'}`}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -298,63 +387,68 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
     backgroundColor: Colors.card,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingTop: 16,
-    paddingHorizontal: 20,
     maxHeight: '90%',
-    borderTopWidth: 1,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+    borderWidth: 1,
     borderColor: Colors.cardBorder,
   },
   sheetHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Colors.cardBorder,
   },
   sheetTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: Colors.textPrimary,
   },
+  sheetSubtitle: {
+    fontSize: 11,
+    color: Colors.primary,
+    fontWeight: '600',
+    marginTop: 2,
+  },
   closeBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 6,
   },
   scrollContent: {
-    paddingBottom: 40,
+    padding: 20,
   },
   typeToggleRow: {
     flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
+    gap: 12,
+    marginBottom: 20,
   },
   typeBtn: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
   },
   typeBtnActiveExpense: {
     backgroundColor: Colors.outflow,
+    borderColor: Colors.outflow,
   },
   typeBtnActiveIncome: {
     backgroundColor: Colors.inflow,
+    borderColor: Colors.inflow,
   },
   typeBtnText: {
     fontSize: 13,
@@ -373,24 +467,59 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    paddingVertical: 14,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
+    paddingVertical: 10,
+    marginBottom: 16,
   },
   dollarSymbol: {
     fontSize: 32,
     fontWeight: '700',
-    color: Colors.textPrimary,
+    color: Colors.textMuted,
     marginRight: 6,
   },
   amountInput: {
-    fontSize: 36,
+    fontSize: 42,
     fontWeight: '800',
     color: Colors.textPrimary,
-    minWidth: 120,
+    minWidth: 140,
+    textAlign: 'center',
+  },
+  chipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 8,
+  },
+  accountChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  accountChipSelected: {
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+  },
+  accountChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  accountChipTextSelected: {
+    color: Colors.primary,
+    fontWeight: '700',
+  },
+  accountCustomInput: {
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    color: Colors.textPrimary,
+    fontSize: 13,
+    marginBottom: 16,
   },
   activityCard: {
     backgroundColor: Colors.surface,
@@ -536,18 +665,13 @@ const styles = StyleSheet.create({
   },
   saveBtn: {
     backgroundColor: Colors.primary,
+    borderRadius: 12,
     paddingVertical: 14,
-    borderRadius: 14,
     alignItems: 'center',
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 4,
   },
   saveBtnText: {
     color: '#0B0F19',
-    fontSize: 16,
-    fontWeight: '800',
+    fontSize: 15,
+    fontWeight: '700',
   },
 });

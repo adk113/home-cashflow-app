@@ -22,6 +22,8 @@ import { VisualReportsView } from './src/components/VisualReportsView';
 import { TransactionList } from './src/components/TransactionList';
 import { TransactionModal } from './src/components/TransactionModal';
 import { CurrencyModal } from './src/components/CurrencyModal';
+import { SmsApprovalQueue } from './src/components/SmsApprovalQueue';
+import { PendingSmsTransaction } from './src/types/transaction';
 import { calculateCategoryBreakdown } from './src/utils/accounting';
 import { formatCurrency, getActivityConfig } from './src/utils/formatters';
 
@@ -43,11 +45,15 @@ function MainScreen() {
     deleteTransaction,
     deleteTransactions,
     clearAllTransactions,
+    pendingSms,
+    approvePendingSms,
+    dismissPendingSms,
   } = useTransactions();
 
   const [activeTab, setActiveTab] = useState<TabKey>('dashboard');
   const [modalVisible, setModalVisible] = useState<boolean>(false);
   const [modalInitialType, setModalInitialType] = useState<'income' | 'expense'>('expense');
+  const [editingPendingSms, setEditingPendingSms] = useState<PendingSmsTransaction | null>(null);
   const [currencyModalVisible, setCurrencyModalVisible] = useState<boolean>(false);
 
   // Compute category breakdowns for visual reports
@@ -62,8 +68,23 @@ function MainScreen() {
   );
 
   const openAddModal = (type: 'income' | 'expense' = 'expense') => {
+    setEditingPendingSms(null);
     setModalInitialType(type);
     setModalVisible(true);
+  };
+
+  const handleEditPendingSms = (sms: PendingSmsTransaction) => {
+    setEditingPendingSms(sms);
+    setModalInitialType(sms.type);
+    setModalVisible(true);
+  };
+
+  const handleSaveTransaction = async (data: any) => {
+    await addTransaction(data);
+    if (editingPendingSms) {
+      await dismissPendingSms(editingPendingSms.id);
+      setEditingPendingSms(null);
+    }
   };
 
   if (isLoading) {
@@ -128,6 +149,15 @@ function MainScreen() {
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 60 }}>
             {/* Net Balance & Income/Expense Hero */}
             <NetBalanceHero metrics={metrics} currency={currency} onOpenAddModal={openAddModal} />
+
+            {/* Background SMS Pending Approval Queue */}
+            <SmsApprovalQueue
+              queue={pendingSms}
+              currency={currency}
+              onApprove={approvePendingSms}
+              onDismiss={dismissPendingSms}
+              onEdit={handleEditPendingSms}
+            />
 
             {/* Accounting 3-Pillar Quick Summary */}
             <View style={styles.summarySection}>
@@ -327,11 +357,21 @@ function MainScreen() {
       {/* Add Transaction Modal */}
       <TransactionModal
         visible={modalVisible}
-        initialType={modalInitialType}
+        initialType={editingPendingSms ? editingPendingSms.type : modalInitialType}
+        initialAmount={editingPendingSms?.amount}
+        initialCategoryId={editingPendingSms?.suggestedCategoryId}
+        initialActivity={editingPendingSms?.activity}
+        initialSourceAccount={editingPendingSms?.sourceAccount || 'Cash'}
+        initialDate={editingPendingSms?.date}
+        initialNotes={editingPendingSms ? editingPendingSms.body : ''}
+        initialEntryMode={editingPendingSms ? 'AUTOMATED' : 'MANUAL'}
         categories={categories}
         currency={currency}
-        onClose={() => setModalVisible(false)}
-        onSave={addTransaction}
+        onClose={() => {
+          setModalVisible(false);
+          setEditingPendingSms(null);
+        }}
+        onSave={handleSaveTransaction}
       />
 
       {/* Select Currency Modal */}

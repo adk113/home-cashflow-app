@@ -19,13 +19,29 @@ CREATE TABLE IF NOT EXISTS transactions (
   category_id TEXT NOT NULL,
   date TEXT NOT NULL,
   notes TEXT,
+  entry_mode TEXT DEFAULT 'MANUAL',
+  source_account TEXT DEFAULT 'Cash',
   created_at INTEGER NOT NULL,
   FOREIGN KEY (category_id) REFERENCES categories (id)
+);
+
+CREATE TABLE IF NOT EXISTS pending_sms_queue (
+  id TEXT PRIMARY KEY,
+  sender TEXT NOT NULL,
+  body TEXT NOT NULL,
+  amount REAL NOT NULL,
+  type TEXT NOT NULL,
+  activity TEXT NOT NULL,
+  suggested_category_id TEXT NOT NULL,
+  source_account TEXT NOT NULL,
+  date TEXT NOT NULL,
+  detected_at INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
 CREATE INDEX IF NOT EXISTS idx_transactions_activity ON transactions(activity);
 CREATE INDEX IF NOT EXISTS idx_transactions_type ON transactions(type);
+CREATE INDEX IF NOT EXISTS idx_transactions_entry_mode ON transactions(entry_mode);
 `;
 
 export const DEFAULT_CATEGORIES: Category[] = [

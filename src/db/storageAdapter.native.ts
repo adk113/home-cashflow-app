@@ -1,19 +1,9 @@
 import * as SQLite from 'expo-sqlite';
 import { DEFAULT_CATEGORIES } from './schema';
-import { Category, Transaction } from '../types/transaction';
+import { Category, EntryMode, PendingSmsTransaction, Transaction } from '../types/transaction';
+import { DatabaseAdapter } from './adapterInterface';
 
-export interface DatabaseAdapter {
-  init(): Promise<void>;
-  getCategories(): Promise<Category[]>;
-  saveCategory(cat: Category): Promise<void>;
-  getTransactions(): Promise<Transaction[]>;
-  insertTransaction(tx: Transaction): Promise<void>;
-  updateTransaction(tx: Transaction): Promise<void>;
-  deleteTransaction(id: string): Promise<void>;
-  deleteTransactions(ids: string[]): Promise<void>;
-  clearAllTransactions(): Promise<void>;
-  clearAllData(): Promise<void>;
-}
+export { DatabaseAdapter };
 
 export class NativeSQLiteAdapter implements DatabaseAdapter {
   private db: any = null;
@@ -21,7 +11,7 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
   async init(): Promise<void> {
     this.db = SQLite.openDatabaseSync('cashflow.db');
     
-    // Execute schema
+    // Execute core schema
     this.db.execSync(`
       CREATE TABLE IF NOT EXISTS categories (
         id TEXT PRIMARY KEY,
@@ -41,12 +31,42 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
         category_id TEXT NOT NULL,
         date TEXT NOT NULL,
         notes TEXT,
+        entry_mode TEXT DEFAULT 'MANUAL',
+        source_account TEXT DEFAULT 'Cash',
         created_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS pending_sms_queue (
+        id TEXT PRIMARY KEY,
+        sender TEXT NOT NULL,
+        body TEXT NOT NULL,
+        amount REAL NOT NULL,
+        type TEXT NOT NULL,
+        activity TEXT NOT NULL,
+        suggested_category_id TEXT NOT NULL,
+        source_account TEXT NOT NULL,
+        date TEXT NOT NULL,
+        detected_at INTEGER NOT NULL
       );
 
       CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
       CREATE INDEX IF NOT EXISTS idx_transactions_activity ON transactions(activity);
+      CREATE INDEX IF NOT EXISTS idx_transactions_entry_mode ON transactions(entry_mode);
     `);
+
+    // Migration helper: Ensure entry_mode and source_account columns exist on existing databases
+    try {
+      const tableInfo = this.db.getAllSync('PRAGMA table_info(transactions);');
+      const columnNames = tableInfo.map((col: any) => col.name);
+      if (!columnNames.includes('entry_mode')) {
+        this.db.execSync("ALTER TABLE transactions ADD COLUMN entry_mode TEXT DEFAULT 'MANUAL';");
+      }
+      if (!columnNames.includes('source_account')) {
+        this.db.execSync("ALTER TABLE transactions ADD COLUMN source_account TEXT DEFAULT 'Cash';");
+      }
+    } catch (e) {
+      console.warn('SQLite migration pragma check notice:', e);
+    }
 
     // Seed categories if empty
     const existing = this.db.getAllSync('SELECT COUNT(*) as count FROM categories');
@@ -90,21 +110,44 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
       categoryId: r.category_id,
       date: r.date,
       notes: r.notes || '',
+      entryMode: (r.entry_mode as EntryMode) || 'MANUAL',
+      sourceAccount: r.source_account || 'Cash',
       createdAt: Number(r.created_at),
     }));
   }
 
   async insertTransaction(tx: Transaction): Promise<void> {
     this.db.runSync(
-      'INSERT INTO transactions (id, amount, type, activity, category_id, date, notes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [tx.id, tx.amount, tx.type, tx.activity, tx.categoryId, tx.date, tx.notes || null, tx.createdAt]
+      'INSERT INTO transactions (id, amount, type, activity, category_id, date, notes, entry_mode, source_account, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        tx.id,
+        tx.amount,
+        tx.type,
+        tx.activity,
+        tx.categoryId,
+        tx.date,
+        tx.notes || null,
+        tx.entryMode || 'MANUAL',
+        tx.sourceAccount || 'Cash',
+        tx.createdAt,
+      ]
     );
   }
 
   async updateTransaction(tx: Transaction): Promise<void> {
     this.db.runSync(
-      'UPDATE transactions SET amount = ?, type = ?, activity = ?, category_id = ?, date = ?, notes = ? WHERE id = ?',
-      [tx.amount, tx.type, tx.activity, tx.categoryId, tx.date, tx.notes || null, tx.id]
+      'UPDATE transactions SET amount = ?, type = ?, activity = ?, category_id = ?, date = ?, notes = ?, entry_mode = ?, source_account = ? WHERE id = ?',
+      [
+        tx.amount,
+        tx.type,
+        tx.activity,
+        tx.categoryId,
+        tx.date,
+        tx.notes || null,
+        tx.entryMode || 'MANUAL',
+        tx.sourceAccount || 'Cash',
+        tx.id,
+      ]
     );
   }
 
@@ -124,6 +167,50 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
 
   async clearAllData(): Promise<void> {
     this.db.runSync('DELETE FROM transactions');
+    this.db.runSync('DELETE FROM pending_sms_queue');
+  }
+
+  // Pending SMS Queue Operations
+  async getPendingSms(): Promise<PendingSmsTransaction[]> {
+    const rows = this.db.getAllSync('SELECT * FROM pending_sms_queue ORDER BY detected_at DESC');
+    return rows.map((r: any) => ({
+      id: r.id,
+      sender: r.sender,
+      body: r.body,
+      amount: Number(r.amount),
+      type: r.type,
+      activity: r.activity,
+      suggestedCategoryId: r.suggested_category_id,
+      sourceAccount: r.source_account,
+      date: r.date,
+      detectedAt: Number(r.detected_at),
+    }));
+  }
+
+  async savePendingSms(sms: PendingSmsTransaction): Promise<void> {
+    this.db.runSync(
+      'INSERT OR REPLACE INTO pending_sms_queue (id, sender, body, amount, type, activity, suggested_category_id, source_account, date, detected_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        sms.id,
+        sms.sender,
+        sms.body,
+        sms.amount,
+        sms.type,
+        sms.activity,
+        sms.suggestedCategoryId,
+        sms.sourceAccount,
+        sms.date,
+        sms.detectedAt,
+      ]
+    );
+  }
+
+  async deletePendingSms(id: string): Promise<void> {
+    this.db.runSync('DELETE FROM pending_sms_queue WHERE id = ?', [id]);
+  }
+
+  async clearAllPendingSms(): Promise<void> {
+    this.db.runSync('DELETE FROM pending_sms_queue');
   }
 }
 

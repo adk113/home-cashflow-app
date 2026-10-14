@@ -1,28 +1,20 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DEFAULT_CATEGORIES } from './schema';
-import { Category, Transaction } from '../types/transaction';
+import { Category, EntryMode, PendingSmsTransaction, Transaction } from '../types/transaction';
+import { DatabaseAdapter } from './adapterInterface';
 
-export interface DatabaseAdapter {
-  init(): Promise<void>;
-  getCategories(): Promise<Category[]>;
-  saveCategory(cat: Category): Promise<void>;
-  getTransactions(): Promise<Transaction[]>;
-  insertTransaction(tx: Transaction): Promise<void>;
-  updateTransaction(tx: Transaction): Promise<void>;
-  deleteTransaction(id: string): Promise<void>;
-  deleteTransactions(ids: string[]): Promise<void>;
-  clearAllTransactions(): Promise<void>;
-  clearAllData(): Promise<void>;
-}
+export { DatabaseAdapter };
 
 const ASYNC_STORAGE_KEYS = {
   CATEGORIES: '@cashflow_categories_v2',
   TRANSACTIONS: '@cashflow_transactions_v2',
+  PENDING_SMS: '@cashflow_pending_sms_v1',
 };
 
 export class CrossPlatformStorageAdapter implements DatabaseAdapter {
   private categories: Category[] = [];
   private transactions: Transaction[] = [];
+  private pendingSms: PendingSmsTransaction[] = [];
 
   async init(): Promise<void> {
     try {
@@ -40,10 +32,18 @@ export class CrossPlatformStorageAdapter implements DatabaseAdapter {
       } else {
         this.transactions = [];
       }
+
+      const rawSms = await AsyncStorage.getItem(ASYNC_STORAGE_KEYS.PENDING_SMS);
+      if (rawSms) {
+        this.pendingSms = JSON.parse(rawSms);
+      } else {
+        this.pendingSms = [];
+      }
     } catch (e) {
       console.warn('Web storage init warning:', e);
       this.categories = [...DEFAULT_CATEGORIES];
       this.transactions = [];
+      this.pendingSms = [];
     }
   }
 
@@ -62,23 +62,38 @@ export class CrossPlatformStorageAdapter implements DatabaseAdapter {
   }
 
   async getTransactions(): Promise<Transaction[]> {
-    return [...this.transactions].sort((a, b) => {
-      if (a.date !== b.date) {
-        return b.date.localeCompare(a.date);
-      }
-      return b.createdAt - a.createdAt;
-    });
+    return [...this.transactions]
+      .map((t) => ({
+        ...t,
+        entryMode: (t.entryMode as EntryMode) || 'MANUAL',
+        sourceAccount: t.sourceAccount || 'Cash',
+      }))
+      .sort((a, b) => {
+        if (a.date !== b.date) {
+          return b.date.localeCompare(a.date);
+        }
+        return b.createdAt - a.createdAt;
+      });
   }
 
   async insertTransaction(tx: Transaction): Promise<void> {
-    this.transactions.unshift(tx);
+    const formatted: Transaction = {
+      ...tx,
+      entryMode: tx.entryMode || 'MANUAL',
+      sourceAccount: tx.sourceAccount || 'Cash',
+    };
+    this.transactions.unshift(formatted);
     await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.TRANSACTIONS, JSON.stringify(this.transactions));
   }
 
   async updateTransaction(tx: Transaction): Promise<void> {
     const idx = this.transactions.findIndex((t) => t.id === tx.id);
     if (idx >= 0) {
-      this.transactions[idx] = tx;
+      this.transactions[idx] = {
+        ...tx,
+        entryMode: tx.entryMode || 'MANUAL',
+        sourceAccount: tx.sourceAccount || 'Cash',
+      };
       await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.TRANSACTIONS, JSON.stringify(this.transactions));
     }
   }
@@ -102,7 +117,29 @@ export class CrossPlatformStorageAdapter implements DatabaseAdapter {
 
   async clearAllData(): Promise<void> {
     this.transactions = [];
+    this.pendingSms = [];
     await AsyncStorage.removeItem(ASYNC_STORAGE_KEYS.TRANSACTIONS);
+    await AsyncStorage.removeItem(ASYNC_STORAGE_KEYS.PENDING_SMS);
+  }
+
+  // Pending SMS Queue
+  async getPendingSms(): Promise<PendingSmsTransaction[]> {
+    return [...this.pendingSms].sort((a, b) => b.detectedAt - a.detectedAt);
+  }
+
+  async savePendingSms(sms: PendingSmsTransaction): Promise<void> {
+    this.pendingSms.unshift(sms);
+    await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.PENDING_SMS, JSON.stringify(this.pendingSms));
+  }
+
+  async deletePendingSms(id: string): Promise<void> {
+    this.pendingSms = this.pendingSms.filter((s) => s.id !== id);
+    await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.PENDING_SMS, JSON.stringify(this.pendingSms));
+  }
+
+  async clearAllPendingSms(): Promise<void> {
+    this.pendingSms = [];
+    await AsyncStorage.removeItem(ASYNC_STORAGE_KEYS.PENDING_SMS);
   }
 }
 

@@ -6,11 +6,15 @@ import {
   PeriodFilter,
   DashboardMetrics,
   Currency,
+  EntryMode,
+  PendingSmsTransaction,
+  AccountingActivity,
 } from '../types/transaction';
 import { TransactionDao } from '../db/transactionDao';
 import { calculateDashboardMetrics } from '../utils/accounting';
 import { filterTransactionsByPeriod } from '../utils/dateFilters';
 import { DEFAULT_CURRENCY } from '../utils/currencies';
+import { createPendingTransactionFromSms } from '../utils/smsParser';
 
 import { useAuth } from './AuthContext';
 
@@ -34,11 +38,18 @@ interface TransactionContextType {
     categoryId: string;
     date: string;
     notes?: string;
+    entryMode?: EntryMode;
+    sourceAccount?: string;
   }) => Promise<void>;
   updateTransaction: (tx: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
   deleteTransactions: (ids: string[]) => Promise<void>;
   clearAllTransactions: () => Promise<void>;
+  pendingSms: PendingSmsTransaction[];
+  addPendingSms: (sms: PendingSmsTransaction) => Promise<void>;
+  approvePendingSms: (id: string, overrides?: { categoryId?: string; activity?: AccountingActivity }) => Promise<void>;
+  dismissPendingSms: (id: string) => Promise<void>;
+  simulateIncomingSms: (sender: string, body: string) => Promise<PendingSmsTransaction | null>;
   refreshData: () => Promise<void>;
   resetToSampleData?: () => Promise<void>;
 }
@@ -48,6 +59,7 @@ const TransactionContext = createContext<TransactionContextType | undefined>(und
 export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [pendingSms, setPendingSms] = useState<PendingSmsTransaction[]>([]);
   const [period, setPeriod] = useState<PeriodFilter>('monthly');
   const [currency, setCurrencyState] = useState<Currency>(DEFAULT_CURRENCY);
   const [isLoading, setIsLoading] = useState<boolean>(true);
@@ -56,13 +68,15 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     try {
       setIsLoading(true);
       await TransactionDao.init();
-      const [cats, txs, savedCurr] = await Promise.all([
+      const [cats, txs, smsQueue, savedCurr] = await Promise.all([
         TransactionDao.getCategories(),
         TransactionDao.getTransactions(),
+        TransactionDao.getPendingSms(),
         AsyncStorage.getItem(CURRENCY_STORAGE_KEY),
       ]);
       setCategories(cats);
       setTransactions(txs);
+      setPendingSms(smsQueue);
       if (savedCurr) {
         try {
           setCurrencyState(JSON.parse(savedCurr));
@@ -116,16 +130,20 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     categoryId: string;
     date: string;
     notes?: string;
+    entryMode?: EntryMode;
+    sourceAccount?: string;
   }) => {
     const newTx: Transaction = {
       id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
-      userId: currentUser?.id || 'user_aditya',
+      userId: currentUser?.id,
       amount: data.amount,
       type: data.type,
       activity: data.activity,
       categoryId: data.categoryId,
       date: data.date,
       notes: data.notes || '',
+      entryMode: data.entryMode || 'MANUAL',
+      sourceAccount: data.sourceAccount || 'Cash',
       createdAt: Date.now(),
     };
 
@@ -155,8 +173,54 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setTransactions([]);
   };
 
+  // Pending SMS Management
+  const addPendingSms = async (sms: PendingSmsTransaction) => {
+    await TransactionDao.savePendingSms(sms);
+    setPendingSms((prev) => [sms, ...prev]);
+  };
+
+  const dismissPendingSms = async (id: string) => {
+    await TransactionDao.deletePendingSms(id);
+    setPendingSms((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  const approvePendingSms = async (
+    id: string,
+    overrides?: { categoryId?: string; activity?: AccountingActivity }
+  ) => {
+    const found = pendingSms.find((s) => s.id === id);
+    if (!found) return;
+
+    const chosenCategoryId = overrides?.categoryId || found.suggestedCategoryId;
+    const cat = categoriesMap.get(chosenCategoryId);
+    const chosenActivity = overrides?.activity || cat?.activity || found.activity;
+
+    // Create automated transaction
+    await addTransaction({
+      amount: found.amount,
+      type: found.type,
+      activity: chosenActivity,
+      categoryId: chosenCategoryId,
+      date: found.date,
+      notes: `${found.body.slice(0, 70)}...`,
+      entryMode: 'AUTOMATED',
+      sourceAccount: found.sourceAccount,
+    });
+
+    // Remove from pending queue
+    await dismissPendingSms(id);
+  };
+
+  const simulateIncomingSms = async (sender: string, body: string): Promise<PendingSmsTransaction | null> => {
+    const detected = createPendingTransactionFromSms(sender, body);
+    if (detected) {
+      await addPendingSms(detected);
+      return detected;
+    }
+    return null;
+  };
+
   const resetToSampleData = async () => {
-    // Left as safe no-op or clear
     await clearAllTransactions();
   };
 
@@ -178,6 +242,11 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         deleteTransaction,
         deleteTransactions,
         clearAllTransactions,
+        pendingSms,
+        addPendingSms,
+        approvePendingSms,
+        dismissPendingSms,
+        simulateIncomingSms,
         refreshData: loadData,
         resetToSampleData,
       }}

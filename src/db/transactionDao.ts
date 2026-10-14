@@ -1,5 +1,5 @@
 import { createDatabaseAdapter, DatabaseAdapter } from './storageAdapter';
-import { Category, Transaction } from '../types/transaction';
+import { Category, PendingSmsTransaction, Transaction } from '../types/transaction';
 import { generateSeedTransactions } from './seedData';
 
 let adapterInstance: DatabaseAdapter | null = null;
@@ -56,5 +56,25 @@ export const TransactionDao = {
   async deleteTransactions(ids: string[]): Promise<void> {
     const adapter = getAdapter();
     return adapter.deleteTransactions(ids);
+  },
+
+  async getPendingSms(): Promise<PendingSmsTransaction[]> {
+    const adapter = getAdapter();
+    return adapter.getPendingSms();
+  },
+
+  async savePendingSms(sms: PendingSmsTransaction): Promise<void> {
+    const adapter = getAdapter();
+    return adapter.savePendingSms(sms);
+  },
+
+  async deletePendingSms(id: string): Promise<void> {
+    const adapter = getAdapter();
+    return adapter.deletePendingSms(id);
+  },
+
+  async clearAllPendingSms(): Promise<void> {
+    const adapter = getAdapter();
+    return adapter.clearAllPendingSms();
   },
 };

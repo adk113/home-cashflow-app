@@ -218,7 +218,17 @@ export const TransactionList: React.FC<TransactionListProps> = ({
             <Text style={styles.notesText} numberOfLines={1}>
               {item.notes || 'No description'}
             </Text>
-            <Text style={styles.dateText}>{formatDatePretty(item.date)}</Text>
+            <View style={styles.subMetaRow}>
+              <Text style={styles.dateText}>{formatDatePretty(item.date)}</Text>
+              <Text style={styles.accountDot}>•</Text>
+              <Text style={styles.accountText} numberOfLines={1}>{item.sourceAccount || 'Cash'}</Text>
+              {item.entryMode === 'AUTOMATED' && (
+                <View style={styles.autoBadge}>
+                  <Ionicons name="flash" size={8} color={Colors.primary} style={{ marginRight: 2 }} />
+                  <Text style={styles.autoBadgeText}>AUTO</Text>
+                </View>
+              )}
+            </View>
           </View>
         </View>
 
@@ -521,10 +531,39 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginTop: 2,
   },
+  subMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
+    flexWrap: 'wrap',
+  },
   dateText: {
     fontSize: 11,
     color: Colors.textMuted,
-    marginTop: 2,
+  },
+  accountDot: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    marginHorizontal: 4,
+  },
+  accountText: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    maxWidth: 120,
+  },
+  autoBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    paddingHorizontal: 4,
+    paddingVertical: 1,
+    borderRadius: 4,
+    marginLeft: 6,
+  },
+  autoBadgeText: {
+    fontSize: 8,
+    fontWeight: '800',
+    color: Colors.primary,
   },
   rightCol: {
     alignItems: 'flex-end',
