@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
-import { Transaction, Category } from '../types/transaction';
+import { Transaction, Category, Currency } from '../types/transaction';
 import { formatCurrency, formatDatePretty, getActivityConfig } from '../utils/formatters';
 import { useTransactions } from '../context/TransactionContext';
 
@@ -24,6 +24,124 @@ interface TransactionListProps {
   onAddNew: () => void;
   periodLabel: string;
 }
+
+// Memoized single row component to prevent re-rendering entire list when one item changes
+const TransactionRow = React.memo<{
+  item: Transaction;
+  cat?: Category;
+  currency?: Currency;
+  isSelected: boolean;
+  isSelectMode: boolean;
+  onToggleSelect: (id: string) => void;
+  onStartSelectMode: (id: string) => void;
+  onDeleteSingle: (item: Transaction) => void;
+}>(({
+  item,
+  cat,
+  currency,
+  isSelected,
+  isSelectMode,
+  onToggleSelect,
+  onStartSelectMode,
+  onDeleteSingle,
+}) => {
+  const actConfig = getActivityConfig(item.activity);
+  const isIncome = item.type === 'income';
+
+  return (
+    <TouchableOpacity
+      style={[
+        styles.txRow,
+        isSelected && styles.txRowSelected,
+      ]}
+      activeOpacity={0.75}
+      onPress={() => {
+        if (isSelectMode) {
+          onToggleSelect(item.id);
+        }
+      }}
+      onLongPress={() => {
+        if (!isSelectMode) {
+          onStartSelectMode(item.id);
+        }
+      }}
+    >
+      <View style={styles.leftCol}>
+        {isSelectMode && (
+          <TouchableOpacity
+            style={styles.checkCol}
+            onPress={() => onToggleSelect(item.id)}
+          >
+            <Ionicons
+              name={isSelected ? 'checkbox' : 'square-outline'}
+              size={22}
+              color={isSelected ? Colors.primary : Colors.textMuted}
+            />
+          </TouchableOpacity>
+        )}
+
+        <View
+          style={[
+            styles.iconBox,
+            { backgroundColor: cat ? `${cat.color}20` : Colors.surface },
+          ]}
+        >
+          <Ionicons
+            name={(cat?.icon as any) || 'pricetag-outline'}
+            size={18}
+            color={cat?.color || Colors.textSecondary}
+          />
+        </View>
+
+        <View style={styles.metaCol}>
+          <View style={styles.titleRow}>
+            <Text style={styles.catName}>{cat?.name || 'Uncategorized'}</Text>
+            <View style={[styles.actBadge, { backgroundColor: actConfig.badgeBg }]}>
+              <Text style={[styles.actBadgeText, { color: actConfig.color }]}>
+                {actConfig.code}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.notesText} numberOfLines={1}>
+            {item.notes || 'No description'}
+          </Text>
+          <View style={styles.subMetaRow}>
+            <Text style={styles.dateText}>{formatDatePretty(item.date)}</Text>
+            <Text style={styles.accountDot}>•</Text>
+            <Text style={styles.accountText} numberOfLines={1}>{item.sourceAccount || 'Cash'}</Text>
+            {item.entryMode === 'AUTOMATED' && (
+              <View style={styles.autoBadge}>
+                <Ionicons name="flash" size={8} color={Colors.primary} style={{ marginRight: 2 }} />
+                <Text style={styles.autoBadgeText}>AUTO</Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.rightCol}>
+        <Text
+          style={[
+            styles.amountText,
+            { color: isIncome ? Colors.inflow : Colors.textPrimary },
+          ]}
+        >
+          {formatCurrency(item.amount, currency, true)}
+        </Text>
+
+        {!isSelectMode && (
+          <TouchableOpacity
+            style={styles.deleteBtn}
+            onPress={() => onDeleteSingle(item)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="trash-outline" size={15} color={Colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+});
 
 export const TransactionList: React.FC<TransactionListProps> = ({
   transactions,
@@ -39,23 +157,27 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   const [isSelectMode, setIsSelectMode] = useState<boolean>(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
-  const filtered = transactions.filter((tx) => {
-    const cat = categoriesMap.get(tx.categoryId);
-    const catName = cat ? cat.name.toLowerCase() : '';
-    const notes = (tx.notes || '').toLowerCase();
-    const source = (tx.sourceAccount || '').toLowerCase();
-    const mode = (tx.entryMode || '').toLowerCase();
+  // Memoized search filtering
+  const filtered = useMemo(() => {
+    if (!searchTerm.trim()) return transactions;
     const query = searchTerm.toLowerCase();
-    return (
-      catName.includes(query) ||
-      notes.includes(query) ||
-      tx.date.includes(query) ||
-      source.includes(query) ||
-      mode.includes(query)
-    );
-  });
+    return transactions.filter((tx) => {
+      const cat = categoriesMap.get(tx.categoryId);
+      const catName = cat ? cat.name.toLowerCase() : '';
+      const notes = (tx.notes || '').toLowerCase();
+      const source = (tx.sourceAccount || '').toLowerCase();
+      const mode = (tx.entryMode || '').toLowerCase();
+      return (
+        catName.includes(query) ||
+        notes.includes(query) ||
+        tx.date.includes(query) ||
+        source.includes(query) ||
+        mode.includes(query)
+      );
+    });
+  }, [transactions, categoriesMap, searchTerm]);
 
-  const toggleSelectTx = (id: string) => {
+  const toggleSelectTx = useCallback((id: string) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -65,22 +187,27 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       }
       return next;
     });
-  };
+  }, []);
 
-  const handleSelectAll = () => {
+  const startSelectMode = useCallback((id: string) => {
+    setIsSelectMode(true);
+    setSelectedIds(new Set([id]));
+  }, []);
+
+  const handleSelectAll = useCallback(() => {
     if (selectedIds.size === filtered.length) {
       setSelectedIds(new Set());
     } else {
       setSelectedIds(new Set(filtered.map((t) => t.id)));
     }
-  };
+  }, [selectedIds.size, filtered]);
 
-  const exitSelectMode = () => {
+  const exitSelectMode = useCallback(() => {
     setIsSelectMode(false);
     setSelectedIds(new Set());
-  };
+  }, []);
 
-  const confirmDeleteSingle = (tx: Transaction) => {
+  const confirmDeleteSingle = useCallback((tx: Transaction) => {
     const cat = categoriesMap.get(tx.categoryId);
     const name = cat?.name || 'this transaction';
     const msg = `Are you sure you want to delete ${name} (${formatCurrency(tx.amount, currency)})?`;
@@ -99,9 +226,9 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         },
       ]);
     }
-  };
+  }, [categoriesMap, currency, onDeleteTransaction]);
 
-  const confirmDeleteSelected = () => {
+  const confirmDeleteSelected = useCallback(() => {
     if (selectedIds.size === 0) return;
     const count = selectedIds.size;
     const msg = `Are you sure you want to delete ${count} selected transaction${count > 1 ? 's' : ''}? This cannot be undone.`;
@@ -131,9 +258,9 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         },
       ]);
     }
-  };
+  }, [selectedIds, onDeleteTransactions, onDeleteTransaction, exitSelectMode]);
 
-  const confirmClearAll = () => {
+  const confirmClearAll = useCallback(() => {
     if (transactions.length === 0) return;
     const msg = `Are you sure you want to clear all ${transactions.length} transactions from the ledger? All records will be reset to zero.`;
 
@@ -160,109 +287,25 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         },
       ]);
     }
-  };
+  }, [transactions, onClearAll, onDeleteTransactions, exitSelectMode]);
 
-  const renderItem = ({ item }: { item: Transaction }) => {
+  const renderItem = useCallback(({ item }: { item: Transaction }) => {
     const cat = categoriesMap.get(item.categoryId);
-    const actConfig = getActivityConfig(item.activity);
-    const isIncome = item.type === 'income';
     const isSelected = selectedIds.has(item.id);
 
     return (
-      <TouchableOpacity
-        style={[
-          styles.txRow,
-          isSelected && styles.txRowSelected,
-        ]}
-        activeOpacity={0.75}
-        onPress={() => {
-          if (isSelectMode) {
-            toggleSelectTx(item.id);
-          }
-        }}
-        onLongPress={() => {
-          if (!isSelectMode) {
-            setIsSelectMode(true);
-            setSelectedIds(new Set([item.id]));
-          }
-        }}
-      >
-        <View style={styles.leftCol}>
-          {isSelectMode && (
-            <TouchableOpacity
-              style={styles.checkCol}
-              onPress={() => toggleSelectTx(item.id)}
-            >
-              <Ionicons
-                name={isSelected ? 'checkbox' : 'square-outline'}
-                size={22}
-                color={isSelected ? Colors.primary : Colors.textMuted}
-              />
-            </TouchableOpacity>
-          )}
-
-          <View
-            style={[
-              styles.iconBox,
-              { backgroundColor: cat ? `${cat.color}20` : Colors.surface },
-            ]}
-          >
-            <Ionicons
-              name={(cat?.icon as any) || 'pricetag-outline'}
-              size={18}
-              color={cat?.color || Colors.textSecondary}
-            />
-          </View>
-
-          <View style={styles.metaCol}>
-            <View style={styles.titleRow}>
-              <Text style={styles.catName}>{cat?.name || 'Uncategorized'}</Text>
-              <View style={[styles.actBadge, { backgroundColor: actConfig.badgeBg }]}>
-                <Text style={[styles.actBadgeText, { color: actConfig.color }]}>
-                  {actConfig.code}
-                </Text>
-              </View>
-            </View>
-            <Text style={styles.notesText} numberOfLines={1}>
-              {item.notes || 'No description'}
-            </Text>
-            <View style={styles.subMetaRow}>
-              <Text style={styles.dateText}>{formatDatePretty(item.date)}</Text>
-              <Text style={styles.accountDot}>•</Text>
-              <Text style={styles.accountText} numberOfLines={1}>{item.sourceAccount || 'Cash'}</Text>
-              {item.entryMode === 'AUTOMATED' && (
-                <View style={styles.autoBadge}>
-                  <Ionicons name="flash" size={8} color={Colors.primary} style={{ marginRight: 2 }} />
-                  <Text style={styles.autoBadgeText}>AUTO</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        </View>
-
-        <View style={styles.rightCol}>
-          <Text
-            style={[
-              styles.amountText,
-              { color: isIncome ? Colors.inflow : Colors.textPrimary },
-            ]}
-          >
-            {formatCurrency(item.amount, currency, true)}
-          </Text>
-
-          {!isSelectMode && (
-            <TouchableOpacity
-              style={styles.deleteBtn}
-              onPress={() => confirmDeleteSingle(item)}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="trash-outline" size={15} color={Colors.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
-      </TouchableOpacity>
+      <TransactionRow
+        item={item}
+        cat={cat}
+        currency={currency}
+        isSelected={isSelected}
+        isSelectMode={isSelectMode}
+        onToggleSelect={toggleSelectTx}
+        onStartSelectMode={startSelectMode}
+        onDeleteSingle={confirmDeleteSingle}
+      />
     );
-  };
+  }, [categoriesMap, selectedIds, currency, isSelectMode, toggleSelectTx, startSelectMode, confirmDeleteSingle]);
 
   return (
     <View style={styles.container}>
@@ -373,6 +416,10 @@ export const TransactionList: React.FC<TransactionListProps> = ({
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 60 }}
           showsVerticalScrollIndicator={false}
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
+          removeClippedSubviews={Platform.OS !== 'web'}
         />
       )}
     </View>
