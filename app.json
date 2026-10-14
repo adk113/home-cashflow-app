@@ -2,8 +2,8 @@
   "expo": {
     "name": "Home CashFlow Tracker",
     "slug": "home-cashflow-app",
-    "version": "1.0.3",
-    "orientation": "portrait",
+    "version": "1.0.4",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
@@ -12,7 +12,7 @@
     },
     "android": {
       "package": "com.aditya.homecashflow",
-      "versionCode": 4,
+      "versionCode": 5,
       "adaptiveIcon": {
         "backgroundColor": "#0B0F19",
         "foregroundImage": "./assets/android-icon-foreground.png",

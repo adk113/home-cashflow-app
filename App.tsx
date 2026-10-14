@@ -100,21 +100,26 @@ function MainScreen() {
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor={Colors.background} />
 
-      {/* Top Application Bar */}
+      {/* Top Application Bar with proper status bar clearance */}
       <View style={styles.topBar}>
         <View style={styles.brandRow}>
           <View style={styles.logoIcon}>
             <Ionicons name="pie-chart" size={18} color="#0B0F19" />
           </View>
-          <View>
-            <Text style={styles.brandTitle}>Home CashFlow</Text>
-            <Text style={styles.brandSubtitle}>
-              {currentUser ? `${currentUser.avatar} ${currentUser.name}` : 'Household Ledger'}
-            </Text>
-          </View>
+          <Text style={styles.brandTitle}>Home CashFlow</Text>
+        </View>
+      </View>
+
+      {/* Utility Bar Below: Currency Selection & Profile Logout (Safely away from battery and operator signals) */}
+      <View style={styles.utilityBar}>
+        <View style={styles.userBadge}>
+          <Text style={styles.userAvatar}>{currentUser?.avatar || '👤'}</Text>
+          <Text style={styles.userName} numberOfLines={1}>
+            {currentUser ? currentUser.name : 'Household Ledger'}
+          </Text>
         </View>
 
-        <View style={styles.headerRight}>
+        <View style={styles.utilityActions}>
           {/* Currency Switcher Pill */}
           <TouchableOpacity
             style={styles.currencyBtn}
@@ -125,17 +130,17 @@ function MainScreen() {
               <Text style={styles.currSymbolText}>{currency.symbol}</Text>
             </View>
             <Text style={styles.currCodeText}>{currency.code}</Text>
-            <Ionicons name="chevron-down" size={12} color={Colors.textSecondary} style={{ marginLeft: 2 }} />
+            <Ionicons name="chevron-down" size={12} color={Colors.textSecondary} style={{ marginLeft: 3 }} />
           </TouchableOpacity>
 
-          {/* User Profile / Switch Account Button */}
+          {/* User Profile / Logout / Switch Account Button */}
           <TouchableOpacity
-            style={styles.userProfileBtn}
+            style={styles.logoutBtn}
             onPress={logout}
             activeOpacity={0.7}
           >
-            <Text style={{ fontSize: 13, marginRight: 4 }}>{currentUser?.avatar || '👤'}</Text>
-            <Ionicons name="log-out-outline" size={13} color={Colors.textSecondary} />
+            <Ionicons name="log-out-outline" size={13} color="#F43F5E" style={{ marginRight: 3 }} />
+            <Text style={styles.logoutBtnText}>Switch</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -435,8 +440,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? 20 : 8,
-    paddingBottom: 8,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) + 8 : 12,
+    paddingBottom: 4,
   },
   brandRow: {
     flexDirection: 'row',
@@ -457,11 +462,36 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     letterSpacing: -0.3,
   },
-  brandSubtitle: {
-    fontSize: 11,
+  utilityBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
+  },
+  userBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: Colors.surface,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+    maxWidth: '55%',
+  },
+  userAvatar: {
+    fontSize: 13,
+    marginRight: 6,
+  },
+  userName: {
+    fontSize: 12,
+    fontWeight: '600',
     color: Colors.textSecondary,
   },
-  headerRight: {
+  utilityActions: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
@@ -470,8 +500,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: Colors.surface,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 9,
+    paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: Colors.cardBorder,
@@ -495,15 +525,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: Colors.textPrimary,
   },
-  userProfileBtn: {
+  logoutBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 8,
+    backgroundColor: 'rgba(244, 63, 94, 0.1)',
+    paddingHorizontal: 9,
     paddingVertical: 5,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
+    borderColor: 'rgba(244, 63, 94, 0.25)',
+  },
+  logoutBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#F43F5E',
   },
   resetBtn: {
     flexDirection: 'row',
