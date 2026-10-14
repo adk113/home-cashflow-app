@@ -1,0 +1,451 @@
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Colors } from '../theme/colors';
+import { CashFlowStatement, AccountingActivity } from '../types/transaction';
+import { formatCurrency, getActivityConfig } from '../utils/formatters';
+
+interface CashFlowStatementViewProps {
+  statement: CashFlowStatement;
+  periodLabel: string;
+}
+
+export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
+  statement,
+  periodLabel,
+}) => {
+  const [expandedSection, setExpandedSection] = useState<AccountingActivity | null>('operating');
+
+  const toggleSection = (section: AccountingActivity) => {
+    setExpandedSection(expandedSection === section ? null : section);
+  };
+
+  const renderActivityCard = (
+    activity: AccountingActivity,
+    inflows: number,
+    outflows: number,
+    net: number,
+    items: { categoryName: string; amount: number; type: 'income' | 'expense' }[]
+  ) => {
+    const config = getActivityConfig(activity);
+    const isExpanded = expandedSection === activity;
+    const isNetPositive = net >= 0;
+
+    return (
+      <View style={styles.sectionCard}>
+        {/* Header clickable toggle */}
+        <TouchableOpacity
+          style={styles.sectionHeader}
+          onPress={() => toggleSection(activity)}
+          activeOpacity={0.7}
+        >
+          <View style={styles.headerLeft}>
+            <View style={[styles.badgePill, { backgroundColor: config.badgeBg }]}>
+              <Text style={[styles.badgeText, { color: config.color }]}>{config.code}</Text>
+            </View>
+            <View>
+              <Text style={styles.activityTitle}>{config.label} Activities</Text>
+              <Text style={styles.activitySubtitle}>{config.description}</Text>
+            </View>
+          </View>
+          <Ionicons
+            name={isExpanded ? 'chevron-up' : 'chevron-down'}
+            size={20}
+            color={Colors.textSecondary}
+          />
+        </TouchableOpacity>
+
+        {/* Inflows & Outflows Summary Line */}
+        <View style={styles.summaryBar}>
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryItemLabel}>Inflow (+)</Text>
+            <Text style={[styles.summaryItemValue, { color: Colors.inflow }]}>
+              {formatCurrency(inflows)}
+            </Text>
+          </View>
+          <View style={styles.verticalDivider} />
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryItemLabel}>Outflow (-)</Text>
+            <Text style={[styles.summaryItemValue, { color: Colors.outflow }]}>
+              {formatCurrency(outflows)}
+            </Text>
+          </View>
+          <View style={styles.verticalDivider} />
+          <View style={styles.summaryItem}>
+            <Text style={styles.summaryItemLabel}>Net {config.code}</Text>
+            <Text
+              style={[
+                styles.summaryItemValue,
+                { color: isNetPositive ? Colors.inflow : Colors.outflow, fontWeight: '700' },
+              ]}
+            >
+              {formatCurrency(net, true)}
+            </Text>
+          </View>
+        </View>
+
+        {/* Expanded Itemized Breakdown */}
+        {isExpanded && (
+          <View style={styles.itemsContainer}>
+            <Text style={styles.itemsHeader}>Itemized Categories</Text>
+            {items.length === 0 ? (
+              <Text style={styles.noItemsText}>No {activity} activity recorded in this period.</Text>
+            ) : (
+              items.map((item, index) => {
+                const isItemIncome = item.type === 'income';
+                return (
+                  <View key={`${item.categoryName}-${index}`} style={styles.itemRow}>
+                    <View style={styles.itemLeft}>
+                      <View
+                        style={[
+                          styles.itemDot,
+                          { backgroundColor: isItemIncome ? Colors.inflow : Colors.outflow },
+                        ]}
+                      />
+                      <Text style={styles.itemName}>{item.categoryName}</Text>
+                    </View>
+                    <Text
+                      style={[
+                        styles.itemAmount,
+                        { color: isItemIncome ? Colors.inflow : Colors.textPrimary },
+                      ]}
+                    >
+                      {isItemIncome ? '+' : '-'}
+                      {formatCurrency(item.amount)}
+                    </Text>
+                  </View>
+                );
+              })
+            )}
+          </View>
+        )}
+      </View>
+    );
+  };
+
+  return (
+    <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      {/* Statement Title Banner */}
+      <View style={styles.banner}>
+        <View>
+          <Text style={styles.bannerTitle}>Statement of Cash Flows</Text>
+          <Text style={styles.bannerSubtitle}>Household Accounting Model • {periodLabel}</Text>
+        </View>
+        <View style={styles.statementBadge}>
+          <Text style={styles.statementBadgeText}>GAAP Adjusted</Text>
+        </View>
+      </View>
+
+      {/* 1. Operating Activities */}
+      {renderActivityCard(
+        'operating',
+        statement.operatingInflows,
+        statement.operatingOutflows,
+        statement.netOperating,
+        statement.operatingItems
+      )}
+
+      {/* 2. Investing Activities */}
+      {renderActivityCard(
+        'investing',
+        statement.investingInflows,
+        statement.investingOutflows,
+        statement.netInvesting,
+        statement.investingItems
+      )}
+
+      {/* 3. Financing Activities */}
+      {renderActivityCard(
+        'financing',
+        statement.financingInflows,
+        statement.financingOutflows,
+        statement.netFinancing,
+        statement.financingItems
+      )}
+
+      {/* Bottom Line Reconciliation */}
+      <View style={styles.bottomLineCard}>
+        <View style={styles.bottomLineHeader}>
+          <Text style={styles.bottomLineTitle}>Net Change in Cash</Text>
+          <Text style={styles.reconciliationFormula}>CFO + CFI + CFF</Text>
+        </View>
+
+        <View style={styles.reconciliationRow}>
+          <View style={styles.formulaPill}>
+            <Text style={styles.formulaPillLabel}>Operating</Text>
+            <Text
+              style={[
+                styles.formulaPillVal,
+                { color: statement.netOperating >= 0 ? Colors.inflow : Colors.outflow },
+              ]}
+            >
+              {formatCurrency(statement.netOperating, true)}
+            </Text>
+          </View>
+          <Text style={styles.mathSymbol}>+</Text>
+          <View style={styles.formulaPill}>
+            <Text style={styles.formulaPillLabel}>Investing</Text>
+            <Text
+              style={[
+                styles.formulaPillVal,
+                { color: statement.netInvesting >= 0 ? Colors.inflow : Colors.outflow },
+              ]}
+            >
+              {formatCurrency(statement.netInvesting, true)}
+            </Text>
+          </View>
+          <Text style={styles.mathSymbol}>+</Text>
+          <View style={styles.formulaPill}>
+            <Text style={styles.formulaPillLabel}>Financing</Text>
+            <Text
+              style={[
+                styles.formulaPillVal,
+                { color: statement.netFinancing >= 0 ? Colors.inflow : Colors.outflow },
+              ]}
+            >
+              {formatCurrency(statement.netFinancing, true)}
+            </Text>
+          </View>
+        </View>
+
+        <View style={styles.netCashResultRow}>
+          <Text style={styles.netCashResultLabel}>Net Household Cash Flow:</Text>
+          <Text
+            style={[
+              styles.netCashResultAmount,
+              { color: statement.netCashFlow >= 0 ? Colors.inflow : Colors.outflow },
+            ]}
+          >
+            {formatCurrency(statement.netCashFlow, true)}
+          </Text>
+        </View>
+      </View>
+      <View style={{ height: 40 }} />
+    </ScrollView>
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  banner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 6,
+    marginBottom: 16,
+    backgroundColor: Colors.surface,
+    padding: 16,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  bannerTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  bannerSubtitle: {
+    fontSize: 12,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  statementBadge: {
+    backgroundColor: Colors.primaryMuted,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  statementBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: Colors.primary,
+    textTransform: 'uppercase',
+  },
+  sectionCard: {
+    backgroundColor: Colors.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  headerLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  badgePill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    marginRight: 10,
+  },
+  badgeText: {
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  activityTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  activitySubtitle: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 1,
+  },
+  summaryBar: {
+    flexDirection: 'row',
+    backgroundColor: Colors.surface,
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    marginTop: 14,
+    alignItems: 'center',
+  },
+  summaryItem: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  summaryItemLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    marginBottom: 2,
+  },
+  summaryItemValue: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  verticalDivider: {
+    width: 1,
+    height: 24,
+    backgroundColor: Colors.cardBorder,
+  },
+  itemsContainer: {
+    marginTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: Colors.cardBorder,
+    paddingTop: 12,
+  },
+  itemsHeader: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  noItemsText: {
+    fontSize: 12,
+    color: Colors.textMuted,
+    fontStyle: 'italic',
+    paddingVertical: 4,
+  },
+  itemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 6,
+  },
+  itemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  itemDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    marginRight: 8,
+  },
+  itemName: {
+    fontSize: 13,
+    color: Colors.textPrimary,
+  },
+  itemAmount: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  bottomLineCard: {
+    backgroundColor: Colors.surface,
+    borderRadius: 16,
+    padding: 18,
+    borderWidth: 1.5,
+    borderColor: Colors.primary,
+    marginBottom: 16,
+  },
+  bottomLineHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  bottomLineTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  reconciliationFormula: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  reconciliationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 14,
+  },
+  formulaPill: {
+    flex: 1,
+    backgroundColor: Colors.card,
+    borderRadius: 8,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  formulaPillLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    color: Colors.textMuted,
+    textTransform: 'uppercase',
+  },
+  formulaPillVal: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  mathSymbol: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textMuted,
+    marginHorizontal: 4,
+  },
+  netCashResultRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderTopWidth: 1,
+    borderTopColor: Colors.cardBorder,
+    paddingTop: 12,
+  },
+  netCashResultLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Colors.textPrimary,
+  },
+  netCashResultAmount: {
+    fontSize: 20,
+    fontWeight: '800',
+  },
+});
