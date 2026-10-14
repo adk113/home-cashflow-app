@@ -37,8 +37,10 @@ interface TransactionContextType {
   }) => Promise<void>;
   updateTransaction: (tx: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
+  deleteTransactions: (ids: string[]) => Promise<void>;
+  clearAllTransactions: () => Promise<void>;
   refreshData: () => Promise<void>;
-  resetToSampleData: () => Promise<void>;
+  resetToSampleData?: () => Promise<void>;
 }
 
 const TransactionContext = createContext<TransactionContextType | undefined>(undefined);
@@ -141,16 +143,21 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     setTransactions((prev) => prev.filter((t) => t.id !== id));
   };
 
+  const deleteTransactions = async (ids: string[]) => {
+    if (!ids || ids.length === 0) return;
+    await TransactionDao.deleteTransactions(ids);
+    const idSet = new Set(ids);
+    setTransactions((prev) => prev.filter((t) => !idSet.has(t.id)));
+  };
+
+  const clearAllTransactions = async () => {
+    await TransactionDao.clearAllTransactions();
+    setTransactions([]);
+  };
+
   const resetToSampleData = async () => {
-    setIsLoading(true);
-    await TransactionDao.resetToSeedData();
-    const [cats, txs] = await Promise.all([
-      TransactionDao.getCategories(),
-      TransactionDao.getTransactions(),
-    ]);
-    setCategories(cats);
-    setTransactions(txs);
-    setIsLoading(false);
+    // Left as safe no-op or clear
+    await clearAllTransactions();
   };
 
   return (
@@ -169,6 +176,8 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         addTransaction,
         updateTransaction,
         deleteTransaction,
+        deleteTransactions,
+        clearAllTransactions,
         refreshData: loadData,
         resetToSampleData,
       }}

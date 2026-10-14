@@ -10,6 +10,8 @@ export interface DatabaseAdapter {
   insertTransaction(tx: Transaction): Promise<void>;
   updateTransaction(tx: Transaction): Promise<void>;
   deleteTransaction(id: string): Promise<void>;
+  deleteTransactions(ids: string[]): Promise<void>;
+  clearAllTransactions(): Promise<void>;
   clearAllData(): Promise<void>;
 }
 
@@ -108,6 +110,16 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
 
   async deleteTransaction(id: string): Promise<void> {
     this.db.runSync('DELETE FROM transactions WHERE id = ?', [id]);
+  }
+
+  async deleteTransactions(ids: string[]): Promise<void> {
+    if (!ids || ids.length === 0) return;
+    const placeholders = ids.map(() => '?').join(',');
+    this.db.runSync(`DELETE FROM transactions WHERE id IN (${placeholders})`, ids);
+  }
+
+  async clearAllTransactions(): Promise<void> {
+    this.db.runSync('DELETE FROM transactions');
   }
 
   async clearAllData(): Promise<void> {

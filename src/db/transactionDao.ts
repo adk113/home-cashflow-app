@@ -15,27 +15,12 @@ export const TransactionDao = {
   async init(): Promise<void> {
     const adapter = getAdapter();
     await adapter.init();
-    await this.seedIfEmpty();
+    // Do not seed transactions. Start fresh with clean 0 balance.
   },
 
-  async seedIfEmpty(): Promise<void> {
+  async clearAllTransactions(): Promise<void> {
     const adapter = getAdapter();
-    const existing = await adapter.getTransactions();
-    if (existing.length === 0) {
-      const seedTxs = generateSeedTransactions();
-      for (const tx of seedTxs) {
-        await adapter.insertTransaction(tx);
-      }
-    }
-  },
-
-  async resetToSeedData(): Promise<void> {
-    const adapter = getAdapter();
-    await adapter.clearAllData();
-    const seedTxs = generateSeedTransactions();
-    for (const tx of seedTxs) {
-      await adapter.insertTransaction(tx);
-    }
+    await adapter.clearAllTransactions();
   },
 
   async getCategories(): Promise<Category[]> {
@@ -66,5 +51,10 @@ export const TransactionDao = {
   async deleteTransaction(id: string): Promise<void> {
     const adapter = getAdapter();
     return adapter.deleteTransaction(id);
+  },
+
+  async deleteTransactions(ids: string[]): Promise<void> {
+    const adapter = getAdapter();
+    return adapter.deleteTransactions(ids);
   },
 };

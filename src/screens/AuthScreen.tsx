@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -19,11 +19,14 @@ import { User } from '../types/transaction';
 const AVATAR_OPTIONS = ['👨‍💼', '👩‍💼', '🏡', '🧑‍💻', '👨‍👩‍👧', '💼', '🚀', '🎯'];
 
 export const AuthScreen: React.FC = () => {
-  const { users, loginWithPin, loginWithEmail, registerUser } = useAuth();
+  const { users, loginWithPin, loginWithEmail, registerUser, deleteUser } = useAuth();
   
+  const hasUsers = users.length > 0;
   const [selectedUser, setSelectedUser] = useState<User | null>(users[0] || null);
   const [pin, setPin] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'profiles' | 'email' | 'register'>('profiles');
+  const [activeTab, setActiveTab] = useState<'profiles' | 'email' | 'register'>(
+    hasUsers ? 'profiles' : 'register'
+  );
 
   // Email form
   const [emailInput, setEmailInput] = useState<string>('');
@@ -36,6 +39,17 @@ export const AuthScreen: React.FC = () => {
   const [regAvatar, setRegAvatar] = useState<string>('👨‍💼');
 
   const [errorMessage, setErrorMessage] = useState<string>('');
+
+  useEffect(() => {
+    if (users.length > 0) {
+      if (!selectedUser || !users.some((u) => u.id === selectedUser.id)) {
+        setSelectedUser(users[0]);
+      }
+    } else {
+      setSelectedUser(null);
+      setActiveTab('register');
+    }
+  }, [users]);
 
   const handleProfileLogin = async () => {
     if (!selectedUser) {
@@ -72,10 +86,32 @@ export const AuthScreen: React.FC = () => {
   };
 
   const handleRegister = async () => {
+    if (!regName.trim()) {
+      setErrorMessage('Please enter a name for your profile.');
+      return;
+    }
     setErrorMessage('');
     const res = await registerUser(regName, regEmail, regPin, regAvatar);
     if (!res.success) {
       setErrorMessage(res.error || 'Registration failed.');
+    }
+  };
+
+  const confirmDeleteProfile = (userToDelete: User) => {
+    const msg = `Delete profile "${userToDelete.name}" from this device?`;
+    if (Platform.OS === 'web') {
+      if (confirm(msg)) {
+        deleteUser(userToDelete.id);
+      }
+    } else {
+      Alert.alert('Delete Profile', msg, [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => deleteUser(userToDelete.id),
+        },
+      ]);
     }
   };
 
@@ -89,47 +125,49 @@ export const AuthScreen: React.FC = () => {
             <Ionicons name="pie-chart" size={32} color="#0B0F19" />
           </View>
           <Text style={styles.appName}>Home CashFlow</Text>
-          <Text style={styles.appTagline}>Multi-User Household Financial Ledger</Text>
+          <Text style={styles.appTagline}>Private Household Financial Ledger</Text>
         </View>
 
-        {/* Tab Toggle: Profiles vs Email vs Register */}
-        <View style={styles.tabToggle}>
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'profiles' && styles.tabBtnActive]}
-            onPress={() => {
-              setActiveTab('profiles');
-              setErrorMessage('');
-            }}
-          >
-            <Text style={[styles.tabBtnText, activeTab === 'profiles' && styles.tabBtnTextActive]}>
-              Profiles
-            </Text>
-          </TouchableOpacity>
+        {/* Tab Toggle: Only shown if at least 1 account exists */}
+        {hasUsers && (
+          <View style={styles.tabToggle}>
+            <TouchableOpacity
+              style={[styles.tabBtn, activeTab === 'profiles' && styles.tabBtnActive]}
+              onPress={() => {
+                setActiveTab('profiles');
+                setErrorMessage('');
+              }}
+            >
+              <Text style={[styles.tabBtnText, activeTab === 'profiles' && styles.tabBtnTextActive]}>
+                Profiles ({users.length})
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'email' && styles.tabBtnActive]}
-            onPress={() => {
-              setActiveTab('email');
-              setErrorMessage('');
-            }}
-          >
-            <Text style={[styles.tabBtnText, activeTab === 'email' && styles.tabBtnTextActive]}>
-              Email Login
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tabBtn, activeTab === 'email' && styles.tabBtnActive]}
+              onPress={() => {
+                setActiveTab('email');
+                setErrorMessage('');
+              }}
+            >
+              <Text style={[styles.tabBtnText, activeTab === 'email' && styles.tabBtnTextActive]}>
+                Email Login
+              </Text>
+            </TouchableOpacity>
 
-          <TouchableOpacity
-            style={[styles.tabBtn, activeTab === 'register' && styles.tabBtnActive]}
-            onPress={() => {
-              setActiveTab('register');
-              setErrorMessage('');
-            }}
-          >
-            <Text style={[styles.tabBtnText, activeTab === 'register' && styles.tabBtnTextActive]}>
-              New User
-            </Text>
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[styles.tabBtn, activeTab === 'register' && styles.tabBtnActive]}
+              onPress={() => {
+                setActiveTab('register');
+                setErrorMessage('');
+              }}
+            >
+              <Text style={[styles.tabBtnText, activeTab === 'register' && styles.tabBtnTextActive]}>
+                + Add Profile
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
 
         {/* Error Alert Banner */}
         {errorMessage ? (
@@ -139,11 +177,11 @@ export const AuthScreen: React.FC = () => {
           </View>
         ) : null}
 
-        {/* TAB 1: Household Profiles Quick Login */}
-        {activeTab === 'profiles' && (
+        {/* TAB 1: Household Profiles Quick Login (Only when accounts exist) */}
+        {hasUsers && activeTab === 'profiles' && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Select Your Profile</Text>
-            <Text style={styles.cardSubtitle}>Choose an account and enter the 4-digit PIN</Text>
+            <Text style={styles.cardSubtitle}>Choose your account and enter your 4-digit PIN</Text>
 
             <View style={styles.profileGrid}>
               {users.map((u) => {
@@ -164,7 +202,7 @@ export const AuthScreen: React.FC = () => {
                       {u.name}
                     </Text>
                     <Text style={styles.profileEmail} numberOfLines={1}>
-                      {u.email}
+                      {u.role === 'primary' ? 'Primary' : 'Member'}
                     </Text>
                     {isSelected && (
                       <View style={styles.selectedCheck}>
@@ -190,26 +228,34 @@ export const AuthScreen: React.FC = () => {
                   secureTextEntry={true}
                   maxLength={6}
                 />
-                <Text style={styles.pinHint}>Default demo PIN: 1234</Text>
 
                 <TouchableOpacity style={styles.submitBtn} onPress={handleProfileLogin}>
-                  <Text style={styles.submitBtnText}>Sign In to Household</Text>
+                  <Text style={styles.submitBtnText}>Sign In</Text>
                 </TouchableOpacity>
+
+                {users.length > 1 && (
+                  <TouchableOpacity
+                    style={styles.deleteProfileBtn}
+                    onPress={() => confirmDeleteProfile(selectedUser)}
+                  >
+                    <Text style={styles.deleteProfileText}>Remove Profile from Phone</Text>
+                  </TouchableOpacity>
+                )}
               </View>
             )}
           </View>
         )}
 
         {/* TAB 2: Email & Password/PIN Login */}
-        {activeTab === 'email' && (
+        {hasUsers && activeTab === 'email' && (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Account Sign In</Text>
-            <Text style={styles.cardSubtitle}>Sign in using your registered household email</Text>
+            <Text style={styles.cardSubtitle}>Sign in using your registered email and PIN</Text>
 
             <Text style={styles.inputLabel}>Email Address</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="e.g. adk113@gmail.com"
+              placeholder="e.g. name@example.com"
               placeholderTextColor={Colors.textMuted}
               value={emailInput}
               onChangeText={setEmailInput}
@@ -217,7 +263,7 @@ export const AuthScreen: React.FC = () => {
               autoCapitalize="none"
             />
 
-            <Text style={styles.inputLabel}>Security PIN / Password</Text>
+            <Text style={styles.inputLabel}>Security PIN</Text>
             <TextInput
               style={styles.textInput}
               placeholder="••••"
@@ -235,11 +281,17 @@ export const AuthScreen: React.FC = () => {
           </View>
         )}
 
-        {/* TAB 3: Register New User */}
-        {activeTab === 'register' && (
+        {/* TAB 3 / ONBOARDING: Create Profile (Shown on fresh install or when adding member) */}
+        {(!hasUsers || activeTab === 'register') && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Create Household Profile</Text>
-            <Text style={styles.cardSubtitle}>Add a new family member or personal account</Text>
+            <Text style={styles.cardTitle}>
+              {hasUsers ? 'Add Household Member' : 'Welcome! Setup Your Profile'}
+            </Text>
+            <Text style={styles.cardSubtitle}>
+              {hasUsers
+                ? 'Create a separate profile for another family member on this phone.'
+                : 'Create your private account. All financial records stay 100% offline on your device.'}
+            </Text>
 
             {/* Avatar Picker */}
             <Text style={styles.inputLabel}>Choose Avatar</Text>
@@ -255,19 +307,19 @@ export const AuthScreen: React.FC = () => {
               ))}
             </View>
 
-            <Text style={styles.inputLabel}>Full Name</Text>
+            <Text style={styles.inputLabel}>Your Name / Household Name</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="e.g. Sarah Jenkins"
+              placeholder="e.g. My Household, Alex, or Home"
               placeholderTextColor={Colors.textMuted}
               value={regName}
               onChangeText={setRegName}
             />
 
-            <Text style={styles.inputLabel}>Email Address</Text>
+            <Text style={styles.inputLabel}>Email (Optional)</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="e.g. sarah@example.com"
+              placeholder="(Optional) e.g. you@example.com"
               placeholderTextColor={Colors.textMuted}
               value={regEmail}
               onChangeText={setRegEmail}
@@ -275,7 +327,7 @@ export const AuthScreen: React.FC = () => {
               autoCapitalize="none"
             />
 
-            <Text style={styles.inputLabel}>Create 4-Digit PIN</Text>
+            <Text style={styles.inputLabel}>4-Digit Security PIN (Default: 1234)</Text>
             <TextInput
               style={styles.textInput}
               placeholder="1234"
@@ -288,7 +340,9 @@ export const AuthScreen: React.FC = () => {
             />
 
             <TouchableOpacity style={styles.submitBtn} onPress={handleRegister}>
-              <Text style={styles.submitBtnText}>Create Account & Sign In</Text>
+              <Text style={styles.submitBtnText}>
+                {hasUsers ? 'Create Profile' : 'Create Account & Enter'}
+              </Text>
             </TouchableOpacity>
           </View>
         )}
@@ -297,7 +351,7 @@ export const AuthScreen: React.FC = () => {
         <View style={styles.footerNote}>
           <Ionicons name="shield-checkmark" size={14} color={Colors.inflow} style={{ marginRight: 6 }} />
           <Text style={styles.footerText}>
-            Local-first encryption • Multi-account data isolated on device
+            100% Private & Offline • Encrypted on device
           </Text>
         </View>
       </ScrollView>
@@ -312,29 +366,22 @@ const styles = StyleSheet.create({
   },
   container: {
     paddingHorizontal: 20,
-    paddingTop: 30,
-    paddingBottom: 50,
-    maxWidth: 480,
-    width: '100%',
-    alignSelf: 'center',
+    paddingTop: Platform.OS === 'android' ? 30 : 20,
+    paddingBottom: 40,
+    alignItems: 'center',
   },
   brandHeader: {
     alignItems: 'center',
     marginBottom: 24,
   },
   logoBadge: {
-    width: 64,
-    height: 64,
+    width: 60,
+    height: 60,
     borderRadius: 18,
     backgroundColor: Colors.primary,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 12,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
   },
   appName: {
     fontSize: 24,
@@ -349,10 +396,12 @@ const styles = StyleSheet.create({
   },
   tabToggle: {
     flexDirection: 'row',
-    backgroundColor: Colors.surface,
+    backgroundColor: Colors.card,
     borderRadius: 12,
     padding: 4,
-    marginBottom: 18,
+    marginBottom: 20,
+    width: '100%',
+    maxWidth: 400,
     borderWidth: 1,
     borderColor: Colors.cardBorder,
   },
@@ -363,123 +412,126 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   tabBtnActive: {
-    backgroundColor: Colors.cardBorder,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.primary,
   },
   tabBtnText: {
     fontSize: 12,
     fontWeight: '600',
-    color: Colors.textSecondary,
+    color: Colors.textMuted,
   },
   tabBtnTextActive: {
-    color: Colors.textPrimary,
+    color: Colors.primary,
   },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: 'rgba(244, 63, 94, 0.12)',
-    padding: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
     borderRadius: 10,
-    marginBottom: 14,
+    marginBottom: 16,
+    width: '100%',
+    maxWidth: 400,
     borderWidth: 1,
     borderColor: 'rgba(244, 63, 94, 0.3)',
   },
   errorText: {
     color: '#F43F5E',
     fontSize: 12,
-    fontWeight: '600',
+    flex: 1,
   },
   card: {
     backgroundColor: Colors.card,
-    borderRadius: 20,
+    borderRadius: 18,
     padding: 20,
+    width: '100%',
+    maxWidth: 400,
     borderWidth: 1,
     borderColor: Colors.cardBorder,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 4,
   },
   cardTitle: {
-    fontSize: 17,
+    fontSize: 18,
     fontWeight: '700',
     color: Colors.textPrimary,
   },
   cardSubtitle: {
     fontSize: 12,
     color: Colors.textSecondary,
-    marginTop: 3,
+    marginTop: 4,
     marginBottom: 16,
+    lineHeight: 18,
   },
   profileGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: 10,
     marginBottom: 16,
   },
   profileTile: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flex: 1,
+    minWidth: '45%',
     backgroundColor: Colors.surface,
-    padding: 12,
     borderRadius: 14,
+    padding: 12,
+    alignItems: 'center',
     borderWidth: 1.5,
     borderColor: Colors.cardBorder,
+    position: 'relative',
   },
   profileTileSelected: {
     borderColor: Colors.primary,
     backgroundColor: 'rgba(56, 189, 248, 0.08)',
   },
   avatarEmoji: {
-    fontSize: 26,
-    marginRight: 12,
+    fontSize: 32,
+    marginBottom: 6,
   },
   profileName: {
-    fontSize: 14,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
     color: Colors.textPrimary,
-    flex: 1,
+    textAlign: 'center',
   },
   profileNameSelected: {
     color: Colors.primary,
-    fontWeight: '700',
   },
   profileEmail: {
-    fontSize: 11,
+    fontSize: 10,
     color: Colors.textMuted,
-    marginRight: 8,
+    marginTop: 2,
+    textAlign: 'center',
   },
   selectedCheck: {
-    marginLeft: 6,
+    position: 'absolute',
+    top: 8,
+    right: 8,
   },
   pinSection: {
+    marginTop: 10,
     borderTopWidth: 1,
     borderTopColor: Colors.cardBorder,
     paddingTop: 16,
-    alignItems: 'center',
   },
   pinLabel: {
     fontSize: 13,
     fontWeight: '600',
-    color: Colors.textSecondary,
+    color: Colors.textPrimary,
     marginBottom: 8,
+    textAlign: 'center',
   },
   pinInput: {
-    width: 140,
     backgroundColor: Colors.surface,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.cardBorder,
-    borderRadius: 12,
-    paddingVertical: 10,
-    textAlign: 'center',
+    paddingVertical: 12,
     fontSize: 22,
-    fontWeight: '700',
-    letterSpacing: 8,
-    color: Colors.textPrimary,
-    marginBottom: 6,
-  },
-  pinHint: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    fontStyle: 'italic',
+    fontWeight: '800',
+    letterSpacing: 10,
+    color: Colors.primary,
+    textAlign: 'center',
     marginBottom: 14,
   },
   inputLabel: {
@@ -488,62 +540,62 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     marginBottom: 6,
     marginTop: 10,
-    textTransform: 'uppercase',
   },
   textInput: {
     backgroundColor: Colors.surface,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: Colors.cardBorder,
-    borderRadius: 12,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 12,
     fontSize: 14,
     color: Colors.textPrimary,
+    marginBottom: 6,
   },
   avatarRow: {
     flexDirection: 'row',
-    gap: 8,
-    marginBottom: 6,
+    justifyContent: 'space-between',
+    marginBottom: 10,
   },
   avatarChoice: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
+    padding: 6,
+    borderRadius: 10,
     borderWidth: 1,
-    borderColor: Colors.cardBorder,
+    borderColor: 'transparent',
   },
   avatarChoiceSelected: {
     borderColor: Colors.primary,
-    backgroundColor: Colors.primaryMuted,
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
   },
   submitBtn: {
     backgroundColor: Colors.primary,
-    paddingVertical: 14,
     borderRadius: 12,
+    paddingVertical: 14,
     alignItems: 'center',
-    marginTop: 18,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 4,
+    marginTop: 16,
   },
   submitBtnText: {
     color: '#0B0F19',
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
+  },
+  deleteProfileBtn: {
+    alignItems: 'center',
+    marginTop: 12,
+    paddingVertical: 6,
+  },
+  deleteProfileText: {
+    color: '#F43F5E',
+    fontSize: 11,
+    fontWeight: '600',
   },
   footerNote: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 20,
+    marginTop: 24,
   },
   footerText: {
-    fontSize: 11,
+    fontSize: 12,
     color: Colors.textMuted,
   },
 });

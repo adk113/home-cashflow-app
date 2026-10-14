@@ -41,7 +41,8 @@ function MainScreen() {
     isLoading,
     addTransaction,
     deleteTransaction,
-    resetToSampleData,
+    deleteTransactions,
+    clearAllTransactions,
   } = useTransactions();
 
   const [activeTab, setActiveTab] = useState<TabKey>('dashboard');
@@ -114,14 +115,6 @@ function MainScreen() {
           >
             <Text style={{ fontSize: 13, marginRight: 4 }}>{currentUser?.avatar || '👤'}</Text>
             <Ionicons name="log-out-outline" size={13} color={Colors.textSecondary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.resetBtn}
-            onPress={resetToSampleData}
-          >
-            <Ionicons name="reload-outline" size={13} color={Colors.textSecondary} style={{ marginRight: 3 }} />
-            <Text style={styles.resetBtnText}>Demo</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -255,6 +248,8 @@ function MainScreen() {
             transactions={filteredTransactions}
             categoriesMap={categoriesMap}
             onDeleteTransaction={deleteTransaction}
+            onDeleteTransactions={deleteTransactions}
+            onClearAll={clearAllTransactions}
             onAddNew={() => openAddModal('expense')}
             periodLabel={metrics.periodLabel}
           />

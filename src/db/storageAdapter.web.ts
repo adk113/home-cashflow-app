@@ -10,12 +10,14 @@ export interface DatabaseAdapter {
   insertTransaction(tx: Transaction): Promise<void>;
   updateTransaction(tx: Transaction): Promise<void>;
   deleteTransaction(id: string): Promise<void>;
+  deleteTransactions(ids: string[]): Promise<void>;
+  clearAllTransactions(): Promise<void>;
   clearAllData(): Promise<void>;
 }
 
 const ASYNC_STORAGE_KEYS = {
-  CATEGORIES: '@cashflow_categories_v1',
-  TRANSACTIONS: '@cashflow_transactions_v1',
+  CATEGORIES: '@cashflow_categories_v2',
+  TRANSACTIONS: '@cashflow_transactions_v2',
 };
 
 export class CrossPlatformStorageAdapter implements DatabaseAdapter {
@@ -84,6 +86,18 @@ export class CrossPlatformStorageAdapter implements DatabaseAdapter {
   async deleteTransaction(id: string): Promise<void> {
     this.transactions = this.transactions.filter((t) => t.id !== id);
     await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.TRANSACTIONS, JSON.stringify(this.transactions));
+  }
+
+  async deleteTransactions(ids: string[]): Promise<void> {
+    if (!ids || ids.length === 0) return;
+    const idSet = new Set(ids);
+    this.transactions = this.transactions.filter((t) => !idSet.has(t.id));
+    await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.TRANSACTIONS, JSON.stringify(this.transactions));
+  }
+
+  async clearAllTransactions(): Promise<void> {
+    this.transactions = [];
+    await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.TRANSACTIONS, JSON.stringify([]));
   }
 
   async clearAllData(): Promise<void> {

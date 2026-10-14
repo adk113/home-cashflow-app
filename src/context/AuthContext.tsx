@@ -2,35 +2,10 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../types/transaction';
 
-const USERS_STORAGE_KEY = '@cashflow_users_v1';
-const ACTIVE_USER_ID_KEY = '@cashflow_active_user_id';
+const USERS_STORAGE_KEY = '@cashflow_users_v2';
+const ACTIVE_USER_ID_KEY = '@cashflow_active_user_id_v2';
 
-export const DEFAULT_USERS: User[] = [
-  {
-    id: 'user_aditya',
-    name: 'Aditya Kumar',
-    email: 'adk113@gmail.com',
-    avatar: '👨‍💼',
-    pin: '1234',
-    role: 'primary',
-  },
-  {
-    id: 'user_family',
-    name: 'Family Shared',
-    email: 'family@home.local',
-    avatar: '🏡',
-    pin: '1234',
-    role: 'member',
-  },
-  {
-    id: 'user_partner',
-    name: 'Partner / Spouse',
-    email: 'partner@home.local',
-    avatar: '👩‍💼',
-    pin: '1234',
-    role: 'member',
-  },
-];
+export const DEFAULT_USERS: User[] = [];
 
 interface AuthContextType {
   currentUser: User | null;
@@ -39,7 +14,7 @@ interface AuthContextType {
   isLoadingAuth: boolean;
   loginWithPin: (userId: string, pin: string) => Promise<{ success: boolean; error?: string }>;
   loginWithEmail: (email: string, pin: string) => Promise<{ success: boolean; error?: string }>;
-  registerUser: (name: string, email: string, pin: string, avatar: string) => Promise<{ success: boolean; user?: User; error?: string }>;
+  registerUser: (name: string, email?: string, pin?: string, avatar?: string) => Promise<{ success: boolean; user?: User; error?: string }>;
   logout: () => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
 }
@@ -47,19 +22,26 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [users, setUsers] = useState<User[]>(DEFAULT_USERS);
+  const [users, setUsers] = useState<User[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState<boolean>(true);
 
   useEffect(() => {
     const initAuth = async () => {
       try {
+        // Clean up legacy v1 keys if present
+        try {
+          await AsyncStorage.multiRemove(['@cashflow_users_v1', '@cashflow_active_user_id', '@cashflow_transactions_v1']);
+        } catch {
+          // ignore
+        }
+
         const storedUsersRaw = await AsyncStorage.getItem(USERS_STORAGE_KEY);
-        let loadedUsers = DEFAULT_USERS;
+        let loadedUsers: User[] = [];
         if (storedUsersRaw) {
           loadedUsers = JSON.parse(storedUsersRaw);
         } else {
-          await AsyncStorage.setItem(USERS_STORAGE_KEY, JSON.stringify(DEFAULT_USERS));
+          await AsyncStorage.setItem(USERS_STORAGE_KEY, JSON.stringify([]));
         }
         setUsers(loadedUsers);
 
@@ -111,26 +93,32 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const registerUser = async (
     name: string,
-    email: string,
-    pin: string,
-    avatar: string
+    email?: string,
+    pin?: string,
+    avatar?: string
   ): Promise<{ success: boolean; user?: User; error?: string }> => {
     if (!name.trim()) return { success: false, error: 'Please enter your name.' };
-    if (!email.trim()) return { success: false, error: 'Please enter a valid email address.' };
-    if (!pin || pin.length < 4) return { success: false, error: 'PIN must be at least 4 digits.' };
+    
+    const cleanPin = (pin || '').trim();
+    if (cleanPin && cleanPin.length < 4) {
+      return { success: false, error: 'PIN must be at least 4 digits.' };
+    }
 
-    const emailExists = users.some((u) => u.email.toLowerCase() === email.trim().toLowerCase());
-    if (emailExists) {
-      return { success: false, error: 'An account with this email already exists.' };
+    const cleanEmail = (email || '').trim();
+    if (cleanEmail) {
+      const emailExists = users.some((u) => u.email.toLowerCase() === cleanEmail.toLowerCase());
+      if (emailExists) {
+        return { success: false, error: 'An account with this email already exists.' };
+      }
     }
 
     const newUser: User = {
       id: `user_${Date.now()}`,
       name: name.trim(),
-      email: email.trim(),
-      pin: pin.trim(),
+      email: cleanEmail || `${name.trim().toLowerCase().replace(/[^a-z0-9]/g, '')}@home.local`,
+      pin: cleanPin || '1234',
       avatar: avatar || '👤',
-      role: 'member',
+      role: users.length === 0 ? 'primary' : 'member',
     };
 
     const updated = [...users, newUser];
