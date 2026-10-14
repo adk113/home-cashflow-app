@@ -18,13 +18,25 @@ import { formatDatePretty, getActivityConfig } from '../utils/formatters';
 import { getTodayIso } from '../utils/dateFilters';
 import { DatePickerModal } from './DatePickerModal';
 
-const COMMON_ACCOUNTS = [
-  { label: '💵 Cash', value: 'Cash' },
-  { label: '🏛️ HDFC', value: 'HDFC Bank' },
-  { label: '🏛️ SBI', value: 'SBI Bank' },
-  { label: '🏛️ ICICI', value: 'ICICI Bank' },
-  { label: '📱 UPI', value: 'UPI / GPay' },
+interface CommonAccount {
+  label: string;
+  value: string;
+  suggestedMode: EntryMode;
+}
+
+const COMMON_ACCOUNTS: CommonAccount[] = [
+  { label: '💵 Cash', value: 'Cash', suggestedMode: 'MANUAL' },
+  { label: '🏛️ HDFC', value: 'HDFC Bank', suggestedMode: 'AUTOMATED' },
+  { label: '🏛️ SBI', value: 'SBI Bank', suggestedMode: 'AUTOMATED' },
+  { label: '🏛️ ICICI', value: 'ICICI Bank', suggestedMode: 'AUTOMATED' },
+  { label: '📱 UPI', value: 'UPI / GPay', suggestedMode: 'AUTOMATED' },
+  { label: '💳 Card', value: 'Credit Card', suggestedMode: 'AUTOMATED' },
+  { label: '🏛️ Axis', value: 'Axis Bank', suggestedMode: 'AUTOMATED' },
 ];
+
+// In-memory cache to remember user's preferred source account & entry mode across modal openings
+let cachedLastSourceAccount: string = 'Cash';
+let cachedLastEntryMode: EntryMode = 'MANUAL';
 
 interface TransactionModalProps {
   visible: boolean;
@@ -57,10 +69,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   initialAmount,
   initialCategoryId,
   initialActivity,
-  initialSourceAccount = 'Cash',
+  initialSourceAccount,
   initialDate,
   initialNotes,
-  initialEntryMode = 'MANUAL',
+  initialEntryMode,
   categories,
   currency,
   onClose,
@@ -70,8 +82,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [amountStr, setAmountStr] = useState<string>(initialAmount ? String(initialAmount) : '');
   const [selectedCatId, setSelectedCatId] = useState<string>(initialCategoryId || '');
   const [activity, setActivity] = useState<AccountingActivity>(initialActivity || 'operating');
-  const [sourceAccount, setSourceAccount] = useState<string>(initialSourceAccount || 'Cash');
-  const [entryMode, setEntryMode] = useState<EntryMode>(initialEntryMode || 'MANUAL');
+  const [sourceAccount, setSourceAccount] = useState<string>(initialSourceAccount || cachedLastSourceAccount);
+  const [entryMode, setEntryMode] = useState<EntryMode>(initialEntryMode || cachedLastEntryMode);
   const [dateStr, setDateStr] = useState<string>(initialDate || getTodayIso());
   const [calendarVisible, setCalendarVisible] = useState<boolean>(false);
   const [notes, setNotes] = useState<string>(initialNotes || '');
@@ -86,8 +98,21 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setAmountStr(initialAmount ? String(initialAmount) : '');
       setDateStr(initialDate || getTodayIso());
       setNotes(initialNotes || '');
-      setSourceAccount(initialSourceAccount || 'Cash');
-      setEntryMode(initialEntryMode || 'MANUAL');
+
+      // Intelligently initialize account and mode
+      if (initialSourceAccount !== undefined && initialSourceAccount !== '') {
+        setSourceAccount(initialSourceAccount);
+      } else if (initialEntryMode === 'AUTOMATED') {
+        setSourceAccount(cachedLastSourceAccount !== 'Cash' ? cachedLastSourceAccount : 'HDFC Bank');
+      } else {
+        setSourceAccount(cachedLastSourceAccount);
+      }
+
+      if (initialEntryMode !== undefined) {
+        setEntryMode(initialEntryMode);
+      } else {
+        setEntryMode(cachedLastEntryMode);
+      }
 
       if (initialCategoryId) {
         setSelectedCatId(initialCategoryId);
@@ -147,6 +172,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
     try {
       setIsSubmitting(true);
+      const chosenSource = sourceAccount.trim() || (entryMode === 'AUTOMATED' ? 'Bank Account' : 'Cash');
+
+      // Update in-memory cache so subsequent manual entries remember user's choice
+      cachedLastSourceAccount = chosenSource;
+      cachedLastEntryMode = entryMode;
+
       await onSave({
         amount: num,
         type,
@@ -155,7 +186,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         date: dateStr || getTodayIso(),
         notes: notes.trim(),
         entryMode,
-        sourceAccount: sourceAccount.trim() || 'Cash',
+        sourceAccount: chosenSource,
       });
       onClose();
     } catch (err) {
@@ -178,11 +209,19 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           <View style={styles.sheetHeader}>
             <View>
               <Text style={styles.sheetTitle}>
-                {entryMode === 'AUTOMATED' ? 'Review Automated SMS' : 'New Transaction'}
+                {initialNotes?.includes('SMS') || (initialEntryMode === 'AUTOMATED' && initialAmount)
+                  ? 'Review Automated SMS'
+                  : entryMode === 'AUTOMATED'
+                  ? 'Bank / Electronic Entry'
+                  : 'Manual Transaction'}
               </Text>
-              {entryMode === 'AUTOMATED' && (
-                <Text style={styles.sheetSubtitle}>Verified via background bank SMS</Text>
-              )}
+              <Text style={styles.sheetSubtitle}>
+                {entryMode === 'AUTOMATED'
+                  ? (initialNotes?.includes('SMS')
+                      ? 'Verified via background bank SMS'
+                      : 'Manual bank/UPI entry (SMS missed or direct)')
+                  : 'Offline cash or hand ledger entry'}
+              </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
               <Ionicons name="close" size={20} color={Colors.textSecondary} />
@@ -237,8 +276,99 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               />
             </View>
 
+            {/* Entry Mode / Capture Method Selector */}
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionLabel}>Entry Mode</Text>
+              <View style={[styles.modeIndicatorBadge, entryMode === 'AUTOMATED' ? styles.badgeAuto : styles.badgeManual]}>
+                <Ionicons
+                  name={entryMode === 'AUTOMATED' ? 'flash' : 'create'}
+                  size={10}
+                  color={entryMode === 'AUTOMATED' ? Colors.primary : Colors.textSecondary}
+                  style={{ marginRight: 3 }}
+                />
+                <Text style={[styles.modeIndicatorText, entryMode === 'AUTOMATED' ? styles.textAuto : styles.textManual]}>
+                  {entryMode === 'AUTOMATED' ? 'Bank / Online' : 'Manual / Cash'}
+                </Text>
+              </View>
+            </View>
+
+            <View style={styles.modeTabsRow}>
+              <TouchableOpacity
+                style={[
+                  styles.modeTab,
+                  entryMode === 'MANUAL' && styles.modeTabActiveManual,
+                ]}
+                onPress={() => {
+                  setEntryMode('MANUAL');
+                  if (sourceAccount !== 'Cash' && !sourceAccount.includes('Bank') && !sourceAccount.includes('UPI')) {
+                    // keep custom
+                  } else {
+                    setSourceAccount('Cash');
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.modeTabIconBox, entryMode === 'MANUAL' && styles.modeTabIconBoxActiveManual]}>
+                  <Ionicons
+                    name="wallet-outline"
+                    size={16}
+                    color={entryMode === 'MANUAL' ? Colors.primary : Colors.textSecondary}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.modeTabTitle, entryMode === 'MANUAL' && styles.modeTabTitleActive]}>
+                    Manual / Cash
+                  </Text>
+                  <Text style={styles.modeTabSubtitle} numberOfLines={1}>
+                    Cash, wallet & hand ledger
+                  </Text>
+                </View>
+                {entryMode === 'MANUAL' && (
+                  <Ionicons name="checkmark-circle" size={16} color={Colors.primary} />
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.modeTab,
+                  entryMode === 'AUTOMATED' && styles.modeTabActiveAuto,
+                ]}
+                onPress={() => {
+                  setEntryMode('AUTOMATED');
+                  if (sourceAccount.toLowerCase() === 'cash') {
+                    setSourceAccount('HDFC Bank');
+                  }
+                }}
+                activeOpacity={0.8}
+              >
+                <View style={[styles.modeTabIconBox, entryMode === 'AUTOMATED' && styles.modeTabIconBoxActiveAuto]}>
+                  <Ionicons
+                    name="flash"
+                    size={15}
+                    color={entryMode === 'AUTOMATED' ? Colors.primary : Colors.textSecondary}
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.modeTabTitle, entryMode === 'AUTOMATED' && styles.modeTabTitleActive]}>
+                    Bank / Electronic
+                  </Text>
+                  <Text style={styles.modeTabSubtitle} numberOfLines={1}>
+                    Missed SMS, UPI & NetBanking
+                  </Text>
+                </View>
+                {entryMode === 'AUTOMATED' && (
+                  <Ionicons name="checkmark-circle" size={16} color={Colors.primary} />
+                )}
+              </TouchableOpacity>
+            </View>
+
             {/* Payment Source / Account Selection */}
-            <Text style={styles.sectionLabel}>Source Account / Method</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionLabel}>Source Account / Method</Text>
+              <Text style={styles.sectionHint}>
+                {entryMode === 'AUTOMATED' ? 'Bank, UPI or Card' : 'Cash or Account'}
+              </Text>
+            </View>
             <View style={styles.chipsRow}>
               {COMMON_ACCOUNTS.map((acc) => {
                 const isSelected = sourceAccount.toLowerCase() === acc.value.toLowerCase();
@@ -246,7 +376,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   <TouchableOpacity
                     key={acc.value}
                     style={[styles.accountChip, isSelected && styles.accountChipSelected]}
-                    onPress={() => setSourceAccount(acc.value)}
+                    onPress={() => {
+                      setSourceAccount(acc.value);
+                      if (acc.suggestedMode) {
+                        setEntryMode(acc.suggestedMode);
+                      }
+                    }}
+                    activeOpacity={0.75}
                   >
                     <Text style={[styles.accountChipText, isSelected && styles.accountChipTextSelected]}>
                       {acc.label}
@@ -257,10 +393,22 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </View>
             <TextInput
               style={styles.accountCustomInput}
-              placeholder="Or type custom account (e.g. HDFC A/c XX4521, UPI ID)"
+              placeholder="Or type custom account (e.g. Axis Bank, HDFC XX4521, GPay UPI)"
               placeholderTextColor={Colors.textMuted}
               value={sourceAccount}
-              onChangeText={setSourceAccount}
+              onChangeText={(txt) => {
+                setSourceAccount(txt);
+                if (
+                  txt.toLowerCase().includes('bank') ||
+                  txt.toLowerCase().includes('a/c') ||
+                  txt.toLowerCase().includes('upi') ||
+                  txt.toLowerCase().includes('card')
+                ) {
+                  if (entryMode === 'MANUAL') {
+                    setEntryMode('AUTOMATED');
+                  }
+                }
+              }}
             />
 
             {/* Accounting Activity Classification Badge */}
@@ -373,8 +521,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 {isSubmitting
                   ? 'Recording...'
                   : entryMode === 'AUTOMATED'
-                  ? `Approve & Record ${type === 'income' ? 'Income' : 'Expense'}`
-                  : `Record Manual ${type === 'income' ? 'Income' : 'Expense'}`}
+                  ? `Save Bank ${type === 'income' ? 'Income' : 'Expense'} (Auto)`
+                  : `Save Manual ${type === 'income' ? 'Income' : 'Expense'} (Cash)`}
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -482,6 +630,94 @@ const styles = StyleSheet.create({
     color: Colors.textPrimary,
     minWidth: 140,
     textAlign: 'center',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  sectionHint: {
+    fontSize: 11,
+    color: Colors.textMuted,
+  },
+  modeIndicatorBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 6,
+    borderWidth: 1,
+  },
+  badgeAuto: {
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+  },
+  badgeManual: {
+    backgroundColor: 'rgba(148, 163, 184, 0.12)',
+    borderColor: 'rgba(148, 163, 184, 0.25)',
+  },
+  modeIndicatorText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+  },
+  textAuto: {
+    color: Colors.primary,
+  },
+  textManual: {
+    color: Colors.textSecondary,
+  },
+  modeTabsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginBottom: 16,
+  },
+  modeTab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 10,
+    borderRadius: 12,
+    backgroundColor: Colors.surface,
+    borderWidth: 1,
+    borderColor: Colors.cardBorder,
+  },
+  modeTabActiveManual: {
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(56, 189, 248, 0.08)',
+  },
+  modeTabActiveAuto: {
+    borderColor: Colors.primary,
+    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+  },
+  modeTabIconBox: {
+    width: 30,
+    height: 30,
+    borderRadius: 8,
+    backgroundColor: Colors.card,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 8,
+  },
+  modeTabIconBoxActiveManual: {
+    backgroundColor: 'rgba(56, 189, 248, 0.15)',
+  },
+  modeTabIconBoxActiveAuto: {
+    backgroundColor: 'rgba(56, 189, 248, 0.2)',
+  },
+  modeTabTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Colors.textSecondary,
+  },
+  modeTabTitleActive: {
+    color: Colors.textPrimary,
+  },
+  modeTabSubtitle: {
+    fontSize: 10,
+    color: Colors.textMuted,
+    marginTop: 1,
   },
   chipsRow: {
     flexDirection: 'row',

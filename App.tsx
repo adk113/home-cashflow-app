@@ -361,10 +361,10 @@ function MainScreen() {
         initialAmount={editingPendingSms?.amount}
         initialCategoryId={editingPendingSms?.suggestedCategoryId}
         initialActivity={editingPendingSms?.activity}
-        initialSourceAccount={editingPendingSms?.sourceAccount || 'Cash'}
+        initialSourceAccount={editingPendingSms?.sourceAccount}
         initialDate={editingPendingSms?.date}
         initialNotes={editingPendingSms ? editingPendingSms.body : ''}
-        initialEntryMode={editingPendingSms ? 'AUTOMATED' : 'MANUAL'}
+        initialEntryMode={editingPendingSms ? 'AUTOMATED' : undefined}
         categories={categories}
         currency={currency}
         onClose={() => {

@@ -43,8 +43,16 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     const cat = categoriesMap.get(tx.categoryId);
     const catName = cat ? cat.name.toLowerCase() : '';
     const notes = (tx.notes || '').toLowerCase();
+    const source = (tx.sourceAccount || '').toLowerCase();
+    const mode = (tx.entryMode || '').toLowerCase();
     const query = searchTerm.toLowerCase();
-    return catName.includes(query) || notes.includes(query) || tx.date.includes(query);
+    return (
+      catName.includes(query) ||
+      notes.includes(query) ||
+      tx.date.includes(query) ||
+      source.includes(query) ||
+      mode.includes(query)
+    );
   });
 
   const toggleSelectTx = (id: string) => {
