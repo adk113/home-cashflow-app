@@ -9,13 +9,15 @@ import {
   EntryMode,
   PendingSmsTransaction,
   AccountingActivity,
+  MessageSourceApp,
+  MessageSourceConfig,
 } from '../types/transaction';
 import { TransactionDao } from '../db/transactionDao';
 import { calculateDashboardMetrics } from '../utils/accounting';
 import { filterTransactionsByPeriod } from '../utils/dateFilters';
 import { DEFAULT_CURRENCY } from '../utils/currencies';
 import { createPendingTransactionFromSms } from '../utils/smsParser';
-
+import { smsSyncService, DEFAULT_SOURCE_CONFIG, SyncResult } from '../services/smsSyncService';
 import { useAuth } from './AuthContext';
 
 const CURRENCY_STORAGE_KEY = '@cashflow_selected_currency_v1';
@@ -40,6 +42,7 @@ interface TransactionContextType {
     notes?: string;
     entryMode?: EntryMode;
     sourceAccount?: string;
+    sourceApp?: MessageSourceApp;
   }) => Promise<void>;
   updateTransaction: (tx: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
@@ -49,7 +52,18 @@ interface TransactionContextType {
   addPendingSms: (sms: PendingSmsTransaction) => Promise<void>;
   approvePendingSms: (id: string, overrides?: { categoryId?: string; activity?: AccountingActivity }) => Promise<void>;
   dismissPendingSms: (id: string) => Promise<void>;
-  simulateIncomingSms: (sender: string, body: string) => Promise<PendingSmsTransaction | null>;
+  simulateIncomingSms: (sender: string, body: string, sourcePackage?: string) => Promise<PendingSmsTransaction | null>;
+  // Message & SMS Sync Engine additions
+  messageSourceConfig: MessageSourceConfig;
+  isSyncing: boolean;
+  lastSyncResult: SyncResult | null;
+  setMessageSource: (source: MessageSourceApp) => Promise<void>;
+  updateMessageSourceConfig: (newConfig: Partial<MessageSourceConfig>) => Promise<void>;
+  syncSmsNow: () => Promise<SyncResult>;
+  batchImportSms: (text: string, forcedSource?: MessageSourceApp) => Promise<number>;
+  checkMessagePermissions: () => Promise<{ smsPermission: boolean; notificationAccess: boolean }>;
+  openNotificationSettings: () => Promise<void>;
+  requestSmsPermission: () => Promise<boolean>;
   refreshData: () => Promise<void>;
   resetToSampleData?: () => Promise<void>;
 }
@@ -63,20 +77,25 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const [period, setPeriod] = useState<PeriodFilter>('monthly');
   const [currency, setCurrencyState] = useState<Currency>(DEFAULT_CURRENCY);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [lastSyncResult, setLastSyncResult] = useState<SyncResult | null>(null);
+  const [messageSourceConfig, setMessageSourceConfigState] = useState<MessageSourceConfig>(DEFAULT_SOURCE_CONFIG);
 
   const loadData = useCallback(async () => {
     try {
       setIsLoading(true);
       await TransactionDao.init();
-      const [cats, txs, smsQueue, savedCurr] = await Promise.all([
+      const [cats, txs, smsQueue, savedCurr, sourceCfg] = await Promise.all([
         TransactionDao.getCategories(),
         TransactionDao.getTransactions(),
         TransactionDao.getPendingSms(),
         AsyncStorage.getItem(CURRENCY_STORAGE_KEY),
+        smsSyncService.init(),
       ]);
       setCategories(cats);
       setTransactions(txs);
       setPendingSms(smsQueue);
+      setMessageSourceConfigState(sourceCfg);
       if (savedCurr) {
         try {
           setCurrencyState(JSON.parse(savedCurr));
@@ -132,6 +151,7 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     notes?: string;
     entryMode?: EntryMode;
     sourceAccount?: string;
+    sourceApp?: MessageSourceApp;
   }) => {
     const newTx: Transaction = {
       id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
@@ -145,6 +165,7 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       entryMode: data.entryMode || 'MANUAL',
       sourceAccount: data.sourceAccount || 'Cash',
       createdAt: Date.now(),
+      sourceApp: data.sourceApp,
     };
 
     await TransactionDao.addTransaction(newTx);
@@ -205,19 +226,79 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       notes: `${found.body.slice(0, 70)}...`,
       entryMode: 'AUTOMATED',
       sourceAccount: found.sourceAccount,
+      sourceApp: found.sourceApp,
     });
 
     // Remove from pending queue
     await dismissPendingSms(id);
   };
 
-  const simulateIncomingSms = async (sender: string, body: string): Promise<PendingSmsTransaction | null> => {
-    const detected = createPendingTransactionFromSms(sender, body);
+  const simulateIncomingSms = async (
+    sender: string,
+    body: string,
+    sourcePackage?: string
+  ): Promise<PendingSmsTransaction | null> => {
+    const detected = createPendingTransactionFromSms(sender, body, sourcePackage);
     if (detected) {
       await addPendingSms(detected);
       return detected;
     }
     return null;
+  };
+
+  // Message Source & SMS Sync Center Actions
+  const setMessageSource = async (source: MessageSourceApp) => {
+    const updated = await smsSyncService.setSelectedSource(source);
+    setMessageSourceConfigState(updated);
+  };
+
+  const updateMessageSourceConfig = async (newConfig: Partial<MessageSourceConfig>) => {
+    const updated = await smsSyncService.updateConfig(newConfig);
+    setMessageSourceConfigState(updated);
+  };
+
+  const syncSmsNow = async (): Promise<SyncResult> => {
+    try {
+      setIsSyncing(true);
+      const result = await smsSyncService.syncNow(pendingSms, transactions);
+
+      if (result.items && result.items.length > 0) {
+        // Save newly detected transactions to storage
+        for (const item of result.items) {
+          await TransactionDao.savePendingSms(item);
+        }
+        setPendingSms((prev) => [...result.items, ...prev]);
+      }
+
+      setLastSyncResult(result);
+      setMessageSourceConfigState(smsSyncService.getConfig());
+      return result;
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+
+  const batchImportSms = async (text: string, forcedSource?: MessageSourceApp): Promise<number> => {
+    const { items } = smsSyncService.parseBatchText(text, pendingSms, transactions, forcedSource);
+    if (items.length > 0) {
+      for (const item of items) {
+        await TransactionDao.savePendingSms(item);
+      }
+      setPendingSms((prev) => [...items, ...prev]);
+    }
+    return items.length;
+  };
+
+  const checkMessagePermissions = async () => {
+    return smsSyncService.checkPermissions();
+  };
+
+  const openNotificationSettings = async () => {
+    return smsSyncService.openNotificationListenerSettings();
+  };
+
+  const requestSmsPermission = async () => {
+    return smsSyncService.requestSmsPermission();
   };
 
   const resetToSampleData = async () => {
@@ -247,6 +328,16 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         approvePendingSms,
         dismissPendingSms,
         simulateIncomingSms,
+        messageSourceConfig,
+        isSyncing,
+        lastSyncResult,
+        setMessageSource,
+        updateMessageSourceConfig,
+        syncSmsNow,
+        batchImportSms,
+        checkMessagePermissions,
+        openNotificationSettings,
+        requestSmsPermission,
         refreshData: loadData,
         resetToSampleData,
       }}

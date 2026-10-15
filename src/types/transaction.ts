@@ -31,6 +31,22 @@ export interface Category {
 
 export type EntryMode = 'MANUAL' | 'AUTOMATED';
 
+export type MessageSourceApp =
+  | 'auto' // Auto-detect across all messaging apps with deduplication
+  | 'google_messages' // Google Messages (RCS & SMS) - com.google.android.apps.messaging
+  | 'truecaller' // Truecaller - com.truecaller
+  | 'carrier_sms' // Service Provider / Default Android SMS - content://sms
+  | 'bank_apps'; // Direct UPI & Banking Apps (GPay, PhonePe, Paytm, etc.)
+
+export interface MessageSourceConfig {
+  selectedSource: MessageSourceApp;
+  autoDeduplicate: boolean;
+  syncWindowDays: number;
+  lastSyncTimestamp?: number;
+  notificationAccessGranted?: boolean;
+  smsPermissionGranted?: boolean;
+}
+
 export interface PendingSmsTransaction {
   id: string;
   sender: string;
@@ -42,6 +58,9 @@ export interface PendingSmsTransaction {
   sourceAccount: string; // e.g. "HDFC Bank XX12", "SBI UPI", "Cash"
   date: string; // ISO 'YYYY-MM-DD'
   detectedAt: number; // Unix timestamp ms
+  sourceApp?: MessageSourceApp;
+  sourcePackage?: string; // e.g. 'com.google.android.apps.messaging'
+  hash?: string; // deduplication fingerprint
 }
 
 export interface Transaction {
@@ -56,6 +75,7 @@ export interface Transaction {
   entryMode?: EntryMode; // 'MANUAL' or 'AUTOMATED'
   sourceAccount?: string; // e.g. 'Cash', 'HDFC Bank XX12', 'SBI'
   createdAt: number; // Unix timestamp ms
+  sourceApp?: MessageSourceApp;
 }
 
 export interface CashFlowStatement {

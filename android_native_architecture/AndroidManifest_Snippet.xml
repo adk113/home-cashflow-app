@@ -1,13 +1,14 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="com.aditya.homecashflow">
 
-    <!-- Permissions for local SMS listening -->
+    <!-- Permissions for local SMS & Notification listening -->
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <application>
-        <!-- Background SMS Broadcast Receiver -->
+        <!-- 1. Cellular SMS Broadcast Receiver -->
         <receiver
             android:name=".sms.SmsBroadcastReceiver"
             android:enabled="true"
@@ -17,6 +18,17 @@
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
             </intent-filter>
         </receiver>
+
+        <!-- 2. Notification Listener Service for Google Messages (RCS), Truecaller & Bank Apps -->
+        <service
+            android:name=".sms.CashflowNotificationListenerService"
+            android:label="Home CashFlow Bank Alert Sync"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
     </application>
 
 </manifest>

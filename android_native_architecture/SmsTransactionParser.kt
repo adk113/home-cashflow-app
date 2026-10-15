@@ -5,8 +5,9 @@ import java.util.*
 import java.util.regex.Pattern
 
 /**
- * 2. BANKING SMS PARSER ENGINE
- * Pure Kotlin parsing engine for automated transaction detection from incoming SMS.
+ * 2. BANKING SMS & NOTIFICATION PARSER ENGINE
+ * Pure Kotlin parsing engine supporting Google Messages (RCS), Truecaller,
+ * Carrier cellular SMS, and UPI direct notifications.
  */
 
 data class ParsedBankTransaction(
@@ -17,7 +18,9 @@ data class ParsedBankTransaction(
     val sourceAccount: String,
     val rawSender: String,
     val rawBody: String,
-    val dateIso: String
+    val dateIso: String,
+    val sourceApp: String,
+    val hash: String
 )
 
 object SmsTransactionParser {
@@ -33,12 +36,14 @@ object SmsTransactionParser {
         "BOB" to "Bank of Baroda",
         "CANARA" to "Canara Bank",
         "IDFC" to "IDFC First Bank",
-        "PAYTM" to "Paytm Bank"
+        "PAYTM" to "Paytm Bank",
+        "PHONEPE" to "PhonePe UPI",
+        "GPAY" to "Google Pay"
     )
 
-    // Regex for Currency Amount: "Rs. 1,450.50", "INR 250", "₹ 5,000.00"
+    // Regex for Currency Amount: "Rs. 1,450.50", "INR 250", "₹ 5,000.00", "paid 450"
     private val AMOUNT_PATTERN = Pattern.compile(
-        """(?:(?:rs\.?|inr|₹)\s*([0-9,]+(?:\.[0-9]{1,2})?)|(?:debited|credited|paid|spent|withdrawn|received)\s*(?:by|of|for)?\s*(?:rs\.?|inr|₹)?\s*([0-9,]+(?:\.[0-9]{1,2})?))""",
+        """(?:(?:rs\.?|inr|₹|\$)\s*([0-9,]+(?:\.[0-9]{1,2})?)|(?:debited|credited|paid|spent|withdrawn|received|sent)\s*(?:by|of|for)?\s*(?:rs\.?|inr|₹|\$)?\s*([0-9,]+(?:\.[0-9]{1,2})?))""",
         Pattern.CASE_INSENSITIVE
     )
 
@@ -50,41 +55,49 @@ object SmsTransactionParser {
 
     // Credit indicators (Income)
     private val CREDIT_PATTERN = Pattern.compile(
-        """(?:credited|received|deposited|refunded|refund)""",
+        """(?:credited|received|deposited|refunded|refund|cashback|salary)""",
         Pattern.CASE_INSENSITIVE
     )
 
     // Debit indicators (Expense)
     private val DEBIT_PATTERN = Pattern.compile(
-        """(?:debited|spent|paid|withdrawn|sent|deducted)""",
+        """(?:debited|spent|paid|withdrawn|sent|deducted|charged)""",
         Pattern.CASE_INSENSITIVE
     )
 
-    fun parse(sender: String, body: String): ParsedBankTransaction? {
-        val cleanBody = body.replace("\r", " ").replace("\n", " ")
+    // Category Keyword Rules
+    private val CATEGORY_RULES = listOf(
+        Pair(listOf("swiggy", "zomato", "restaurant", "cafe", "starbucks", "mcdonald", "eats"), Pair("cat_dining", "operating")),
+        Pair(listOf("blinkit", "zepto", "instamart", "bigbasket", "grocery", "dmart"), Pair("cat_groceries", "operating")),
+        Pair(listOf("uber", "ola", "fuel", "petrol", "diesel", "fastag", "metro"), Pair("cat_transport", "operating")),
+        Pair(listOf("electricity", "bescom", "water", "gas", "billdesk", "wifi", "broadband"), Pair("cat_utilities", "operating")),
+        Pair(listOf("pharmacy", "apollo", "medplus", "1mg", "hospital"), Pair("cat_healthcare", "operating")),
+        Pair(listOf("salary", "payroll", "stipend", "wages", "remuneration"), Pair("cat_salary", "operating")),
+        Pair(listOf("dividend", "mutual fund", "zerodha", "groww", "sip"), Pair("cat_invest_return", "investing")),
+        Pair(listOf("emi", "loan", "mortgage", "credit card payment"), Pair("cat_mortgage_paydown", "financing"))
+    )
 
-        // 1. Validate if this is a financial SMS
-        val hasCurrency = cleanBody.contains("Rs", ignoreCase = true) ||
-                cleanBody.contains("INR", ignoreCase = true) ||
-                cleanBody.contains("₹")
-        val hasAction = CREDIT_PATTERN.matcher(cleanBody).find() || DEBIT_PATTERN.matcher(cleanBody).find()
+    fun parse(sender: String, body: String, sourceApp: String = "carrier_sms"): ParsedBankTransaction? {
+        val cleanBody = body.replace("\n", " ").trim()
+        val lowerBody = cleanBody.lowercase(Locale.ROOT)
+        val upperSender = sender.uppercase(Locale.ROOT)
 
-        if (!hasCurrency && !hasAction) return null
-
-        // 2. Extract Amount
+        // 1. Amount Extraction
         val amountMatcher = AMOUNT_PATTERN.matcher(cleanBody)
         if (!amountMatcher.find()) return null
 
-        val amountStr = (amountMatcher.group(1) ?: amountMatcher.group(2))
-            ?.replace(",", "") ?: return null
-        val amount = amountStr.toDoubleOrNull() ?: return null
+        val rawAmountStr = (amountMatcher.group(1) ?: amountMatcher.group(2) ?: "").replace(",", "")
+        val amount = rawAmountStr.toDoubleOrNull() ?: return null
         if (amount <= 0.0) return null
 
-        // 3. Determine Flow Type (Income vs Expense)
-        val isCredit = CREDIT_PATTERN.matcher(cleanBody).find()
-        val type = if (isCredit) "income" else "expense"
+        // 2. Type Extraction (Income vs Expense)
+        val type = when {
+            CREDIT_PATTERN.matcher(lowerBody).find() -> "income"
+            DEBIT_PATTERN.matcher(lowerBody).find() -> "expense"
+            else -> return null // Ambiguous, not a transaction alert
+        }
 
-        // 4. Extract Account Suffix
+        // 3. Account Extraction
         val accountMatcher = ACCOUNT_PATTERN.matcher(cleanBody)
         val accountSuffix = if (accountMatcher.find()) {
             "A/c XX" + accountMatcher.group(1)
@@ -92,65 +105,48 @@ object SmsTransactionParser {
             ""
         }
 
-        // 5. Detect Bank Name from Sender
-        val upperSender = sender.uppercase()
-        var detectedBank = "Bank Account"
-        for ((key, bank) in BANK_SENDER_MAP) {
-            if (upperSender.contains(key) || cleanBody.uppercase().contains(key)) {
-                detectedBank = bank
+        // 4. Bank Name
+        var bankName = "Bank Account"
+        for ((key, name) in BANK_SENDER_MAP) {
+            if (upperSender.contains(key) || cleanBody.uppercase(Locale.ROOT).contains(key)) {
+                bankName = name
+                break
+            }
+        }
+        val sourceAccount = if (accountSuffix.isNotBlank()) "$bankName ($accountSuffix)" else bankName
+
+        // 5. Category & Activity
+        var suggestedCategoryId = if (type == "income") "cat_salary" else "cat_groceries"
+        var activity = "operating"
+
+        for (rule in CATEGORY_RULES) {
+            val keywords = rule.first
+            if (keywords.any { lowerBody.contains(it) }) {
+                suggestedCategoryId = rule.second.first
+                activity = rule.second.second
                 break
             }
         }
 
-        val sourceAccount = if (accountSuffix.isNotEmpty()) "$detectedBank ($accountSuffix)" else detectedBank
+        val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+        val dateIso = sdf.format(Date())
 
-        // 6. Suggest Category & Pillar based on keywords
-        val lowerBody = cleanBody.lowercase()
-        var suggestedCategory = if (isCredit) "cat_salary" else "cat_groceries"
-        var activity = "operating"
-
-        when {
-            lowerBody.contains("swiggy") || lowerBody.contains("zomato") || lowerBody.contains("restaurant") -> {
-                suggestedCategory = "cat_dining"
-                activity = "operating"
-            }
-            lowerBody.contains("blinkit") || lowerBody.contains("zepto") || lowerBody.contains("grocery") -> {
-                suggestedCategory = "cat_groceries"
-                activity = "operating"
-            }
-            lowerBody.contains("uber") || lowerBody.contains("ola") || lowerBody.contains("fuel") || lowerBody.contains("petrol") -> {
-                suggestedCategory = "cat_transport"
-                activity = "operating"
-            }
-            lowerBody.contains("electricity") || lowerBody.contains("billdesk") || lowerBody.contains("wifi") -> {
-                suggestedCategory = "cat_utilities"
-                activity = "operating"
-            }
-            lowerBody.contains("salary") || lowerBody.contains("payroll") -> {
-                suggestedCategory = "cat_salary"
-                activity = "operating"
-            }
-            lowerBody.contains("mutual fund") || lowerBody.contains("sip") || lowerBody.contains("zerodha") || lowerBody.contains("dividend") -> {
-                suggestedCategory = "cat_invest_return"
-                activity = "investing"
-            }
-            lowerBody.contains("emi") || lowerBody.contains("loan") || lowerBody.contains("mortgage") -> {
-                suggestedCategory = "cat_mortgage_paydown"
-                activity = "financing"
-            }
-        }
-
-        val todayIso = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+        // 6. Generate canonical deduplication hash
+        val normAccount = sourceAccount.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
+        val normAmount = Math.round(amount * 100)
+        val hash = "tx_${type}_${normAmount}_${normAccount.take(16)}_$dateIso"
 
         return ParsedBankTransaction(
             amount = amount,
             type = type,
             activity = activity,
-            suggestedCategoryId = suggestedCategory,
+            suggestedCategoryId = suggestedCategoryId,
             sourceAccount = sourceAccount,
             rawSender = sender,
             rawBody = cleanBody,
-            dateIso = todayIso
+            dateIso = dateIso,
+            sourceApp = sourceApp,
+            hash = hash
         )
     }
 }

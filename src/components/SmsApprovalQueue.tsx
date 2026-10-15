@@ -4,17 +4,18 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  Modal,
-  TextInput,
-  ScrollView,
   Platform,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../theme/colors';
-import { Currency, PendingSmsTransaction } from '../types/transaction';
+import { Currency, MessageSourceApp, PendingSmsTransaction } from '../types/transaction';
 import { formatCurrency, formatDatePretty } from '../utils/formatters';
 import { useTransactions } from '../context/TransactionContext';
+import { AVAILABLE_SOURCES } from '../services/smsSyncService';
+import { MessageSourceModal } from './MessageSourceModal';
+import { BatchSmsModal } from './BatchSmsModal';
 
 interface SmsApprovalQueueProps {
   queue: PendingSmsTransaction[];
@@ -24,24 +25,6 @@ interface SmsApprovalQueueProps {
   onEdit: (sms: PendingSmsTransaction) => void;
 }
 
-const SAMPLE_BANK_SMS = [
-  {
-    sender: 'VM-HDFCBK',
-    title: 'HDFC Bank - Swiggy ₹485.00',
-    body: 'Dear Customer, your A/c XX4521 is debited for Rs 485.00 on 14-Oct-26 by VPA swiggy@icici. Avl Bal: Rs 42,350.00 - HDFC Bank',
-  },
-  {
-    sender: 'AD-SBIINB',
-    title: 'SBI - Salary Credited ₹65,000',
-    body: 'Your A/C ending with 9812 has been CREDITED with INR 65,000.00 on 14-OCT-26 by Payroll Salary Deposit. Avl Bal INR 1,12,450.00 - State Bank of India',
-  },
-  {
-    sender: 'VK-ICICIB',
-    title: 'ICICI - Uber Ride ₹340.50',
-    body: 'ICICI Bank Card XX1089 was spent for INR 340.50 at UBER RIDES MUMBAI on 14-Oct-26. Available limit: Rs 1,45,000.',
-  },
-];
-
 export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
   queue,
   currency,
@@ -49,21 +32,35 @@ export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
   onDismiss,
   onEdit,
 }) => {
-  const { simulateIncomingSms } = useTransactions();
-  const [testModalVisible, setTestModalVisible] = useState<boolean>(false);
-  const [customSender, setCustomSender] = useState<string>('VM-HDFCBK');
-  const [customBody, setCustomBody] = useState<string>('');
-  const [parseError, setParseError] = useState<string>('');
+  const {
+    messageSourceConfig,
+    syncSmsNow,
+    isSyncing,
+    lastSyncResult,
+  } = useTransactions();
 
-  const handleSimulate = async (sender: string, body: string) => {
-    setParseError('');
-    const res = await simulateIncomingSms(sender, body);
-    if (!res) {
-      setParseError('Could not detect bank, amount, or action. Please check SMS format.');
-      return;
+  const [sourceModalVisible, setSourceModalVisible] = useState<boolean>(false);
+  const [batchModalVisible, setBatchModalVisible] = useState<boolean>(false);
+  const [syncFeedback, setSyncFeedback] = useState<string>('');
+
+  const currentSourceDef =
+    AVAILABLE_SOURCES.find((s) => s.id === messageSourceConfig.selectedSource) ||
+    AVAILABLE_SOURCES[0];
+
+  const handleSyncNow = async () => {
+    try {
+      setSyncFeedback('');
+      const result = await syncSmsNow();
+      if (result.addedCount > 0) {
+        setSyncFeedback(`Added ${result.addedCount} new transaction(s) to queue!`);
+      } else if (result.duplicatesPrevented > 0) {
+        setSyncFeedback(`Up to date. ${result.duplicatesPrevented} duplicate alert(s) prevented.`);
+      } else {
+        setSyncFeedback('Inbox up to date. No new unreviewed bank alerts found.');
+      }
+    } catch {
+      setSyncFeedback('Sync check completed.');
     }
-    setCustomBody('');
-    setTestModalVisible(false);
   };
 
   const confirmDismiss = (sms: PendingSmsTransaction) => {
@@ -80,105 +77,110 @@ export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
     }
   };
 
+  const getSourceBadgeInfo = (sourceApp?: MessageSourceApp) => {
+    switch (sourceApp) {
+      case 'google_messages':
+        return { label: 'Google Messages (RCS)', color: '#3B82F6', icon: 'chatbubbles-outline' };
+      case 'truecaller':
+        return { label: 'Truecaller', color: '#06B6D4', icon: 'shield-checkmark-outline' };
+      case 'carrier_sms':
+        return { label: 'Carrier SMS', color: '#8B5CF6', icon: 'phone-portrait-outline' };
+      case 'bank_apps':
+        return { label: 'Direct Bank App', color: '#F59E0B', icon: 'card-outline' };
+      default:
+        return { label: 'Auto Verified', color: Colors.primary, icon: 'checkmark-circle-outline' };
+    }
+  };
+
+  // EMPTY QUEUE STATE - Comprehensive Message Sync Center
   if (queue.length === 0) {
     return (
-      <View style={styles.emptyContainer}>
-        <View style={styles.emptyHeaderRow}>
-          <View style={styles.emptyHeaderLeft}>
-            <View style={styles.iconCircle}>
-              <Ionicons name="chatbox-ellipses-outline" size={16} color={Colors.primary} />
+      <View style={styles.syncCenterContainer}>
+        {/* Sync Center Header */}
+        <View style={styles.syncCenterTopRow}>
+          <View style={styles.syncCenterHeaderLeft}>
+            <View style={[styles.sourceIconBox, { backgroundColor: `${currentSourceDef.accentColor}20` }]}>
+              <Ionicons
+                name={currentSourceDef.icon as any}
+                size={18}
+                color={currentSourceDef.accentColor}
+              />
             </View>
             <View>
-              <Text style={styles.emptyTitle}>SMS Auto-Sync Ready</Text>
-              <Text style={styles.emptySubtext}>Banking messages are scanned offline for your review.</Text>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={styles.syncCenterTitle}>SMS & Alert Sync Center</Text>
+                <View style={[styles.sourcePill, { backgroundColor: `${currentSourceDef.accentColor}20` }]}>
+                  <Text style={[styles.sourcePillText, { color: currentSourceDef.accentColor }]}>
+                    {currentSourceDef.badge}
+                  </Text>
+                </View>
+              </View>
+              <Text style={styles.syncCenterSubtext}>
+                True Source: <Text style={{ color: '#FFFFFF', fontWeight: '600' }}>{currentSourceDef.title}</Text>
+              </Text>
             </View>
           </View>
+
           <TouchableOpacity
-            style={styles.testBtn}
-            onPress={() => setTestModalVisible(true)}
+            style={styles.changeSourceBtn}
+            onPress={() => setSourceModalVisible(true)}
             activeOpacity={0.7}
           >
-            <Ionicons name="flash-outline" size={13} color={Colors.primary} style={{ marginRight: 4 }} />
-            <Text style={styles.testBtnText}>Test SMS</Text>
+            <Ionicons name="options-outline" size={13} color={Colors.primary} style={{ marginRight: 3 }} />
+            <Text style={styles.changeSourceBtnText}>Source</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Modal for Testing / Pasting SMS */}
-        {renderTestModal()}
+        {/* Feedback message banner if sync ran */}
+        {syncFeedback ? (
+          <View style={styles.feedbackBanner}>
+            <Ionicons name="information-circle" size={15} color={Colors.primary} style={{ marginRight: 6 }} />
+            <Text style={styles.feedbackText}>{syncFeedback}</Text>
+          </View>
+        ) : null}
+
+        {/* Sync Actions Bar */}
+        <View style={styles.actionRow}>
+          <TouchableOpacity
+            style={[styles.syncNowBtn, isSyncing && { opacity: 0.7 }]}
+            onPress={handleSyncNow}
+            disabled={isSyncing}
+            activeOpacity={0.75}
+          >
+            {isSyncing ? (
+              <ActivityIndicator size="small" color="#0B0F19" style={{ marginRight: 6 }} />
+            ) : (
+              <Ionicons name="sync" size={15} color="#0B0F19" style={{ marginRight: 6 }} />
+            )}
+            <Text style={styles.syncNowBtnText}>{isSyncing ? 'Scanning Inbox...' : 'Sync Messages Now'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.testImportBtn}
+            onPress={() => setBatchModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="scan-outline" size={14} color={Colors.textSecondary} style={{ marginRight: 4 }} />
+            <Text style={styles.testImportBtnText}>Paste / Test</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Explanatory Footnote */}
+        <View style={styles.footerNoteRow}>
+          <Ionicons name="shield-checkmark" size={12} color={Colors.textMuted} style={{ marginRight: 4 }} />
+          <Text style={styles.footerNoteText}>
+            Deduplication: {messageSourceConfig.autoDeduplicate ? 'ON (Zero Double Entries)' : 'OFF'} • Offline local SQLite
+          </Text>
+        </View>
+
+        {/* Modals */}
+        <MessageSourceModal visible={sourceModalVisible} onClose={() => setSourceModalVisible(false)} />
+        <BatchSmsModal visible={batchModalVisible} onClose={() => setBatchModalVisible(false)} />
       </View>
     );
   }
 
-  function renderTestModal() {
-    return (
-      <Modal visible={testModalVisible} transparent={true} animationType="slide">
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalCard}>
-            <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-                <Ionicons name="phone-portrait-outline" size={18} color={Colors.primary} style={{ marginRight: 6 }} />
-                <Text style={styles.modalTitle}>Simulate Incoming Bank SMS</Text>
-              </View>
-              <TouchableOpacity onPress={() => setTestModalVisible(false)}>
-                <Ionicons name="close" size={20} color={Colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Text style={styles.modalSubtitle}>
-                Select a sample bank SMS or paste a real message to test the background parser:
-              </Text>
-
-              {/* Presets */}
-              <Text style={styles.presetHeading}>Quick Samples:</Text>
-              {SAMPLE_BANK_SMS.map((sample, idx) => (
-                <TouchableOpacity
-                  key={idx}
-                  style={styles.sampleCard}
-                  onPress={() => handleSimulate(sample.sender, sample.body)}
-                  activeOpacity={0.7}
-                >
-                  <Text style={styles.sampleTitle}>{sample.title}</Text>
-                  <Text style={styles.sampleBody} numberOfLines={2}>
-                    {sample.body}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-
-              <Text style={[styles.presetHeading, { marginTop: 14 }]}>Or Paste Raw SMS Text:</Text>
-              <TextInput
-                style={styles.senderInput}
-                placeholder="Sender ID (e.g. HDFCBK)"
-                placeholderTextColor={Colors.textMuted}
-                value={customSender}
-                onChangeText={setCustomSender}
-              />
-              <TextInput
-                style={styles.bodyInput}
-                placeholder="Paste SMS body: 'Rs 750 debited from A/c XX1234 on...'"
-                placeholderTextColor={Colors.textMuted}
-                value={customBody}
-                onChangeText={setCustomBody}
-                multiline={true}
-                numberOfLines={3}
-              />
-
-              {parseError ? <Text style={styles.errorText}>{parseError}</Text> : null}
-
-              <TouchableOpacity
-                style={[styles.parseSubmitBtn, !customBody.trim() && { opacity: 0.5 }]}
-                disabled={!customBody.trim()}
-                onPress={() => handleSimulate(customSender, customBody)}
-              >
-                <Text style={styles.parseSubmitText}>Scan & Add to Queue</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
-    );
-  }
-
+  // ACTIVE QUEUE WITH PENDING SMS APPROVALS
   return (
     <View style={styles.container}>
       {/* Queue Header */}
@@ -191,32 +193,80 @@ export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
           </View>
         </View>
 
-        <TouchableOpacity
-          style={styles.testBtn}
-          onPress={() => setTestModalVisible(true)}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="add-circle-outline" size={13} color={Colors.primary} style={{ marginRight: 3 }} />
-          <Text style={styles.testBtnText}>Simulate</Text>
-        </TouchableOpacity>
+        <View style={styles.headerRightActions}>
+          <TouchableOpacity
+            style={[styles.smallSyncBtn, isSyncing && { opacity: 0.6 }]}
+            onPress={handleSyncNow}
+            disabled={isSyncing}
+            activeOpacity={0.7}
+          >
+            {isSyncing ? (
+              <ActivityIndicator size="small" color={Colors.primary} />
+            ) : (
+              <Ionicons name="sync" size={13} color={Colors.primary} style={{ marginRight: 3 }} />
+            )}
+            <Text style={styles.smallSyncText}>{isSyncing ? 'Syncing...' : 'Sync'}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.sourcePillBtn}
+            onPress={() => setSourceModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons
+              name={currentSourceDef.icon as any}
+              size={12}
+              color={currentSourceDef.accentColor}
+              style={{ marginRight: 3 }}
+            />
+            <Text style={[styles.sourcePillBtnText, { color: currentSourceDef.accentColor }]}>
+              {currentSourceDef.title.split(' ')[0]}
+            </Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.testBtn}
+            onPress={() => setBatchModalVisible(true)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="add-circle-outline" size={13} color={Colors.primary} style={{ marginRight: 3 }} />
+            <Text style={styles.testBtnText}>Add</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
+      {syncFeedback ? (
+        <View style={[styles.feedbackBanner, { marginBottom: 10 }]}>
+          <Ionicons name="information-circle" size={14} color={Colors.primary} style={{ marginRight: 5 }} />
+          <Text style={styles.feedbackText}>{syncFeedback}</Text>
+        </View>
+      ) : null}
+
       <Text style={styles.queueSubtext}>
-        Verified banking alerts waiting for your 1-tap review before recording:
+        Verified bank alerts from <Text style={{ color: currentSourceDef.accentColor, fontWeight: '600' }}>{currentSourceDef.title}</Text> waiting for your 1-tap ledger approval:
       </Text>
 
       {/* Queue Items */}
       {queue.map((item) => {
         const isIncome = item.type === 'income';
+        const srcBadge = getSourceBadgeInfo(item.sourceApp);
 
         return (
           <View key={item.id} style={styles.pendingCard}>
             <View style={styles.cardTopRow}>
-              <View style={styles.bankTag}>
-                <Ionicons name="card-outline" size={13} color={Colors.primary} style={{ marginRight: 4 }} />
-                <Text style={styles.bankTagText} numberOfLines={1}>
-                  {item.sourceAccount}
-                </Text>
+              <View style={styles.accountAndSourceCol}>
+                <View style={styles.bankTag}>
+                  <Ionicons name="card-outline" size={13} color={Colors.primary} style={{ marginRight: 4 }} />
+                  <Text style={styles.bankTagText} numberOfLines={1}>
+                    {item.sourceAccount}
+                  </Text>
+                </View>
+
+                {/* Source attribution pill */}
+                <View style={[styles.itemSourcePill, { backgroundColor: `${srcBadge.color}15` }]}>
+                  <Ionicons name={srcBadge.icon as any} size={11} color={srcBadge.color} style={{ marginRight: 3 }} />
+                  <Text style={[styles.itemSourcePillText, { color: srcBadge.color }]}>{srcBadge.label}</Text>
+                </View>
               </View>
 
               <Text style={[styles.amountText, { color: isIncome ? Colors.inflow : Colors.outflow }]}>
@@ -231,7 +281,7 @@ export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
 
             <View style={styles.metaRow}>
               <Text style={styles.dateLabel}>{formatDatePretty(item.date)}</Text>
-              <Text style={styles.modeLabel}>Automated via SMS</Text>
+              <Text style={styles.modeLabel}>Automated Offline Scan</Text>
             </View>
 
             {/* Action Buttons */}
@@ -267,12 +317,140 @@ export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
         );
       })}
 
-      {renderTestModal()}
+      {/* Modals */}
+      <MessageSourceModal visible={sourceModalVisible} onClose={() => setSourceModalVisible(false)} />
+      <BatchSmsModal visible={batchModalVisible} onClose={() => setBatchModalVisible(false)} />
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  syncCenterContainer: {
+    backgroundColor: '#0F1626',
+    borderRadius: 16,
+    padding: 14,
+    marginBottom: 16,
+    borderWidth: 1.5,
+    borderColor: 'rgba(56, 189, 248, 0.3)',
+    shadowColor: Colors.primary,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 3,
+  },
+  syncCenterTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  syncCenterHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  sourceIconBox: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  syncCenterTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  sourcePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+  },
+  sourcePillText: {
+    fontSize: 9,
+    fontWeight: '800',
+  },
+  syncCenterSubtext: {
+    fontSize: 11,
+    color: Colors.textSecondary,
+    marginTop: 2,
+  },
+  changeSourceBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 9,
+    paddingVertical: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  changeSourceBtnText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  feedbackBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(16, 185, 129, 0.25)',
+  },
+  feedbackText: {
+    fontSize: 11,
+    color: '#D1FAE5',
+    fontWeight: '500',
+  },
+  actionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 8,
+  },
+  syncNowBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
+    borderRadius: 10,
+    paddingVertical: 10,
+  },
+  syncNowBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0B0F19',
+  },
+  testImportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1E293B',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  testImportBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Colors.textSecondary,
+  },
+  footerNoteRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 4,
+  },
+  footerNoteText: {
+    fontSize: 10,
+    color: Colors.textMuted,
+  },
   container: {
     backgroundColor: Colors.card,
     borderRadius: 16,
@@ -319,6 +497,38 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
   },
+  headerRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  smallSyncBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  smallSyncText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: Colors.primary,
+  },
+  sourcePillBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1E293B',
+    paddingHorizontal: 7,
+    paddingVertical: 4,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#334155',
+  },
+  sourcePillBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
+  },
   testBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -348,22 +558,39 @@ const styles = StyleSheet.create({
   cardTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 6,
+  },
+  accountAndSourceCol: {
+    flex: 1,
+    marginRight: 8,
   },
   bankTag: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 6,
-    maxWidth: '65%',
+    alignSelf: 'flex-start',
   },
   bankTagText: {
     fontSize: 11,
-    fontWeight: '700',
+    fontWeight: '600',
     color: Colors.primary,
+  },
+  itemSourcePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    alignSelf: 'flex-start',
+    marginTop: 4,
+  },
+  itemSourcePillText: {
+    fontSize: 9,
+    fontWeight: '700',
   },
   amountText: {
     fontSize: 16,
@@ -374,211 +601,72 @@ const styles = StyleSheet.create({
     color: Colors.textSecondary,
     fontStyle: 'italic',
     lineHeight: 16,
-    marginBottom: 6,
+    marginBottom: 8,
   },
   metaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#1E293B',
+    paddingTop: 6,
   },
   dateLabel: {
-    fontSize: 10,
+    fontSize: 11,
     color: Colors.textMuted,
   },
   modeLabel: {
     fontSize: 10,
+    color: Colors.primary,
     fontWeight: '600',
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   cardActions: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
     gap: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.cardBorder,
-    paddingTop: 8,
   },
   dismissBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
+    justifyContent: 'center',
+    backgroundColor: '#1E293B',
     paddingVertical: 6,
+    paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
   dismissBtnText: {
-    fontSize: 11,
-    fontWeight: '600',
+    fontSize: 12,
     color: Colors.textMuted,
-    marginLeft: 2,
+    marginLeft: 3,
+    fontWeight: '600',
   },
   editBtn: {
+    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    justifyContent: 'center',
+    backgroundColor: '#334155',
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Colors.cardBorder,
   },
   editBtnText: {
-    fontSize: 11,
-    fontWeight: '700',
+    fontSize: 12,
     color: Colors.textPrimary,
+    fontWeight: '600',
   },
   approveBtn: {
+    flex: 1.3,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 14,
+    justifyContent: 'center',
+    backgroundColor: Colors.primary,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: Colors.primary,
   },
   approveBtnText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: '#0B0F19',
-  },
-
-  // Empty banner
-  emptyContainer: {
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    padding: 12,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  emptyHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  emptyHeaderLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    flex: 1,
-  },
-  iconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: 'rgba(56, 189, 248, 0.1)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyTitle: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  emptySubtext: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    marginTop: 1,
-  },
-
-  // Modal styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  modalCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    width: '100%',
-    maxWidth: 420,
-    maxHeight: '85%',
-    padding: 20,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  modalTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  modalSubtitle: {
     fontSize: 12,
-    color: Colors.textSecondary,
-    marginBottom: 12,
-    lineHeight: 18,
-  },
-  presetHeading: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-  sampleCard: {
-    backgroundColor: Colors.surface,
-    padding: 10,
-    borderRadius: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  sampleTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.primary,
-    marginBottom: 2,
-  },
-  sampleBody: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    lineHeight: 15,
-  },
-  senderInput: {
-    backgroundColor: Colors.surface,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 13,
-    color: Colors.textPrimary,
-    marginBottom: 8,
-  },
-  bodyInput: {
-    backgroundColor: Colors.surface,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 13,
-    color: Colors.textPrimary,
-    minHeight: 60,
-    textAlignVertical: 'top',
-    marginBottom: 10,
-  },
-  errorText: {
-    fontSize: 11,
-    color: '#F43F5E',
-    marginBottom: 10,
-  },
-  parseSubmitBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: 'center',
-  },
-  parseSubmitText: {
-    fontSize: 13,
-    fontWeight: '700',
     color: '#0B0F19',
+    fontWeight: '700',
   },
 });

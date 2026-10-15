@@ -1,12 +1,14 @@
 package com.aditya.homecashflow.data.local
 
+import android.content.Context
 import androidx.room.*
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * 1. HYBRID ROOM DATABASE SCHEMA
- * Supports both manual user entries and automated bank SMS captures.
+ * Supports manual ledger entries, cellular SMS captures, Google Messages RCS,
+ * Truecaller alerts, and cross-source deduplication.
  */
 
 enum class EntryMode {
@@ -57,13 +59,14 @@ data class TransactionEntity(
     @ColumnInfo(name = "notes")
     val notes: String? = null,
 
-    // NEW FIELD: Differentiates manually typed vs background auto-detected
     @ColumnInfo(name = "entry_mode", defaultValue = "'MANUAL'")
     val entryMode: String = "MANUAL",
 
-    // NEW FIELD: Tracks source of funds (e.g. "Cash", "HDFC Bank XX4521", "SBI UPI")
     @ColumnInfo(name = "source_account", defaultValue = "'Cash'")
     val sourceAccount: String = "Cash",
+
+    @ColumnInfo(name = "source_app")
+    val sourceApp: String? = null,
 
     @ColumnInfo(name = "created_at")
     val createdAt: Long = System.currentTimeMillis()
@@ -71,7 +74,10 @@ data class TransactionEntity(
 
 @Entity(
     tableName = "pending_sms_queue",
-    indices = [Index(value = ["detected_at"])]
+    indices = [
+        Index(value = ["detected_at"]),
+        Index(value = ["hash"])
+    ]
 )
 data class PendingSmsEntity(
     @PrimaryKey
@@ -82,7 +88,7 @@ data class PendingSmsEntity(
     val sender: String, // e.g. "VM-HDFCBK"
 
     @ColumnInfo(name = "body")
-    val body: String, // Raw SMS text
+    val body: String, // Raw SMS / Notification text
 
     @ColumnInfo(name = "amount")
     val amount: Double,
@@ -103,7 +109,13 @@ data class PendingSmsEntity(
     val date: String,
 
     @ColumnInfo(name = "detected_at")
-    val detectedAt: Long = System.currentTimeMillis()
+    val detectedAt: Long = System.currentTimeMillis(),
+
+    @ColumnInfo(name = "source_app")
+    val sourceApp: String? = "carrier_sms", // "google_messages", "truecaller", "carrier_sms", "bank_apps"
+
+    @ColumnInfo(name = "hash")
+    val hash: String = "" // canonical fingerprint for deduplication
 )
 
 @Dao
@@ -135,6 +147,9 @@ interface PendingSmsDao {
     @Query("SELECT * FROM pending_sms_queue ORDER BY detected_at DESC")
     suspend fun getPendingQueue(): List<PendingSmsEntity>
 
+    @Query("SELECT * FROM pending_sms_queue WHERE hash = :hash LIMIT 1")
+    suspend fun getPendingByHash(hash: String): PendingSmsEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun enqueueSms(pending: PendingSmsEntity)
 
@@ -147,7 +162,7 @@ interface PendingSmsDao {
 
 @Database(
     entities = [TransactionEntity::class, PendingSmsEntity::class],
-    version = 2,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -155,27 +170,20 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun pendingSmsDao(): PendingSmsDao
 
     companion object {
-        val MIGRATION_1_2 = object : Migration(1, 2) {
-            override fun migrate(database: SupportSQLiteDatabase) {
-                // Add entry_mode and source_account to transactions table
-                database.execSQL("ALTER TABLE transactions ADD COLUMN entry_mode TEXT NOT NULL DEFAULT 'MANUAL'")
-                database.execSQL("ALTER TABLE transactions ADD COLUMN source_account TEXT NOT NULL DEFAULT 'Cash'")
+        @Volatile
+        private var INSTANCE: AppDatabase? = null
 
-                // Create pending_sms_queue table
-                database.execSQL("""
-                    CREATE TABLE IF NOT EXISTS pending_sms_queue (
-                        id TEXT PRIMARY KEY NOT NULL,
-                        sender TEXT NOT NULL,
-                        body TEXT NOT NULL,
-                        amount REAL NOT NULL,
-                        type TEXT NOT NULL,
-                        activity TEXT NOT NULL,
-                        suggested_category_id TEXT NOT NULL,
-                        source_account TEXT NOT NULL,
-                        date TEXT NOT NULL,
-                        detected_at INTEGER NOT NULL
-                    )
-                """.trimIndent())
+        fun getInstance(context: Context): AppDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    AppDatabase::class.java,
+                    "cashflow_app.db"
+                )
+                    .fallbackToDestructiveMigration()
+                    .build()
+                INSTANCE = instance
+                instance
             }
         }
     }

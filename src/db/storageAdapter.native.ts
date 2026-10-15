@@ -46,7 +46,9 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
         suggested_category_id TEXT NOT NULL,
         source_account TEXT NOT NULL,
         date TEXT NOT NULL,
-        detected_at INTEGER NOT NULL
+        detected_at INTEGER NOT NULL,
+        source_app TEXT,
+        hash TEXT
       );
 
       CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);
@@ -54,15 +56,27 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
       CREATE INDEX IF NOT EXISTS idx_transactions_entry_mode ON transactions(entry_mode);
     `);
 
-    // Migration helper: Ensure entry_mode and source_account columns exist on existing databases
+    // Migration helper: Ensure entry_mode, source_account, source_app, hash columns exist
     try {
-      const tableInfo = this.db.getAllSync('PRAGMA table_info(transactions);');
-      const columnNames = tableInfo.map((col: any) => col.name);
-      if (!columnNames.includes('entry_mode')) {
+      const txInfo = this.db.getAllSync('PRAGMA table_info(transactions);');
+      const txCols = txInfo.map((col: any) => col.name);
+      if (!txCols.includes('entry_mode')) {
         this.db.execSync("ALTER TABLE transactions ADD COLUMN entry_mode TEXT DEFAULT 'MANUAL';");
       }
-      if (!columnNames.includes('source_account')) {
+      if (!txCols.includes('source_account')) {
         this.db.execSync("ALTER TABLE transactions ADD COLUMN source_account TEXT DEFAULT 'Cash';");
+      }
+      if (!txCols.includes('source_app')) {
+        this.db.execSync('ALTER TABLE transactions ADD COLUMN source_app TEXT;');
+      }
+
+      const smsInfo = this.db.getAllSync('PRAGMA table_info(pending_sms_queue);');
+      const smsCols = smsInfo.map((col: any) => col.name);
+      if (!smsCols.includes('source_app')) {
+        this.db.execSync('ALTER TABLE pending_sms_queue ADD COLUMN source_app TEXT;');
+      }
+      if (!smsCols.includes('hash')) {
+        this.db.execSync('ALTER TABLE pending_sms_queue ADD COLUMN hash TEXT;');
       }
     } catch (e) {
       console.warn('SQLite migration pragma check notice:', e);
@@ -184,12 +198,14 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
       sourceAccount: r.source_account,
       date: r.date,
       detectedAt: Number(r.detected_at),
+      sourceApp: r.source_app || undefined,
+      hash: r.hash || undefined,
     }));
   }
 
   async savePendingSms(sms: PendingSmsTransaction): Promise<void> {
     this.db.runSync(
-      'INSERT OR REPLACE INTO pending_sms_queue (id, sender, body, amount, type, activity, suggested_category_id, source_account, date, detected_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO pending_sms_queue (id, sender, body, amount, type, activity, suggested_category_id, source_account, date, detected_at, source_app, hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         sms.id,
         sms.sender,
@@ -201,6 +217,8 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
         sms.sourceAccount,
         sms.date,
         sms.detectedAt,
+        sms.sourceApp || null,
+        sms.hash || null,
       ]
     );
   }

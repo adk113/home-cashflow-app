@@ -2,7 +2,6 @@ package com.aditya.homecashflow.sms
 
 import android.app.NotificationChannel
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
@@ -17,9 +16,9 @@ import kotlinx.coroutines.launch
 import java.util.UUID
 
 /**
- * 2. SMS BROADCAST RECEIVER
- * Background listener for banking alerts.
- * Enqueues into PendingSmsQueue instead of auto-committing directly to ledger.
+ * SMS BROADCAST RECEIVER
+ * Standard cellular SMS receiver for carrier/telephony SMS.
+ * Enqueues into PendingSmsQueue with deduplication checks.
  */
 class SmsBroadcastReceiver : BroadcastReceiver() {
 
@@ -38,13 +37,20 @@ class SmsBroadcastReceiver : BroadcastReceiver() {
         val body = fullBody.toString()
 
         // Parse banking contents
-        val parsed = SmsTransactionParser.parse(sender, body) ?: return
+        val parsed = SmsTransactionParser.parse(sender, body, "carrier_sms") ?: return
 
-        // Asynchronously insert into Pending Queue (Room DB) using Coroutines
+        // Asynchronously insert into Pending Queue (Room DB) with deduplication
         val pendingResult = goAsync()
         CoroutineScope(Dispatchers.IO).launch {
             try {
                 val db = AppDatabase.getInstance(context)
+
+                // Check if already captured via Google Messages or Truecaller notification
+                val exists = db.pendingSmsDao().getPendingByHash(parsed.hash) != null
+                if (exists) {
+                    return@launch
+                }
+
                 val entity = PendingSmsEntity(
                     id = "sms_${UUID.randomUUID()}",
                     sender = sender,
@@ -55,7 +61,9 @@ class SmsBroadcastReceiver : BroadcastReceiver() {
                     suggestedCategoryId = parsed.suggestedCategoryId,
                     sourceAccount = parsed.sourceAccount,
                     date = parsed.dateIso,
-                    detectedAt = System.currentTimeMillis()
+                    detectedAt = System.currentTimeMillis(),
+                    sourceApp = "carrier_sms",
+                    hash = parsed.hash
                 )
 
                 db.pendingSmsDao().enqueueSms(entity)

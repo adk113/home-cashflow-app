@@ -35,6 +35,16 @@ A modern personal finance and household accounting mobile app built with **React
    - Native SQLite via `expo-sqlite` on iOS/Android with cross-platform persistence on Web.
    - Pre-loaded with realistic household demo data.
 
+6. **Multi-Source SMS & Notification Sync Center (Google Messages, Truecaller & Carrier)**:
+   - **True Source Selector**: Select your primary source for financial alerts:
+     - 🔵 **Google Messages (RCS & SMS)**: Captures Google RCS chat bank alerts (`com.google.android.apps.messaging`) and standard SMS.
+     - 🟢 **Truecaller Messages**: Ingests verified bank transactions sorted and filtered by Truecaller's spam shield (`com.truecaller`).
+     - 🟣 **Carrier / Default SMS**: Reads directly from Android's shared telephony SMS database (`content://sms/inbox`).
+     - ⚡ **Auto-Detect & Smart Merge (Recommended)**: Simultaneously listens to all active messaging apps.
+     - 🟡 **Direct UPI & Bank Push Alerts**: Instant capture from PhonePe, GPay, Paytm, and bank apps.
+   - **Cross-App Deduplication Engine**: Prevents duplicate transactions when both Google Messages and Truecaller display notifications for the same bank alert.
+   - **1-Tap Sync & Batch Scanner**: Sync messages on demand or paste raw multi-line alerts from clipboard.
+
 ---
 
 ## 🏛️ Database Structure (SQLite)
