@@ -11,6 +11,8 @@ export interface ParsedSmsResult {
   vendorOrNotes: string;
   detectedSourceApp: MessageSourceApp;
   sourcePackage?: string;
+  detectedUpiApp?: string; // e.g. "CRED Pay", "PhonePe", "Google Pay", "Paytm", "Amazon Pay", "BHIM", "Navi", etc.
+  upiVpa?: string; // e.g. "swiggy@icici", "cred.club@axis"
   hash: string;
 }
 
@@ -33,11 +35,14 @@ const BANK_MAPPINGS: Record<string, string> = {
   YESBNK: 'Yes Bank',
   YESB: 'Yes Bank',
   BOB: 'Bank of Baroda',
+  BARODA: 'Bank of Baroda',
   CANARA: 'Canara Bank',
   UNIONB: 'Union Bank of India',
+  UBI: 'Union Bank of India',
   IDFC: 'IDFC First Bank',
   IDFCFB: 'IDFC First Bank',
   INDUS: 'IndusInd Bank',
+  INDUSB: 'IndusInd Bank',
   FEDERAL: 'Federal Bank',
   FEDBNK: 'Federal Bank',
   RBL: 'RBL Bank',
@@ -49,38 +54,158 @@ const BANK_MAPPINGS: Record<string, string> = {
   CITI: 'Citibank',
   DBS: 'DBS Bank',
   BANDHAN: 'Bandhan Bank',
-  PAYTM: 'Paytm Wallet/Bank',
-  PHONEPE: 'PhonePe UPI',
-  GPAY: 'Google Pay',
-  GOOGLEPAY: 'Google Pay',
-  CRED: 'CRED Alert',
-  JUPITER: 'Jupiter Money',
-  FIMONEY: 'Fi Money',
-  SLICE: 'Slice Card',
+  INDIANB: 'Indian Bank',
+  IOB: 'Indian Overseas Bank',
+  CENTRALB: 'Central Bank of India',
+  BOI: 'Bank of India',
+  UCOB: 'UCO Bank',
+  AUBANK: 'AU Small Finance Bank',
+  EQUITAS: 'Equitas Small Finance Bank',
+  PAYTM: 'Paytm Payments Bank',
   AIRTEL: 'Airtel Payments Bank',
   JIO: 'Jio Payments Bank',
 };
 
-// Known Android Package Names mapped to our MessageSourceApp
+// UPI Registry supporting any and all Indian UPI providers
+export interface UpiDetector {
+  id: string;
+  name: string;
+  sourceAppType: MessageSourceApp;
+  keywords: string[];
+  vpaHandles: string[];
+  packageNames: string[];
+}
+
+export const UPI_REGISTRY: UpiDetector[] = [
+  {
+    id: 'cred_pay',
+    name: 'CRED Pay',
+    sourceAppType: 'cred_pay',
+    keywords: ['cred pay', 'cred club', 'credpay', 'dreamplug', 'via cred', 'to cred'],
+    vpaHandles: ['@cred', 'cred.club', '@axisb', '@yescred'],
+    packageNames: ['com.dreamplug.androidapp'],
+  },
+  {
+    id: 'phonepe',
+    name: 'PhonePe',
+    sourceAppType: 'upi_apps',
+    keywords: ['phonepe', 'phone pe', 'via phonepe'],
+    vpaHandles: ['@ybl', '@ibl', '@axl'],
+    packageNames: ['com.phonepe.app'],
+  },
+  {
+    id: 'gpay',
+    name: 'Google Pay',
+    sourceAppType: 'upi_apps',
+    keywords: ['google pay', 'gpay', 'googlepay', 'via google pay'],
+    vpaHandles: ['@okaxis', '@okhdfcbank', '@okicici', '@oksbi'],
+    packageNames: ['com.google.android.apps.nbu.paisa.user'],
+  },
+  {
+    id: 'paytm',
+    name: 'Paytm UPI',
+    sourceAppType: 'upi_apps',
+    keywords: ['paytm upi', 'via paytm', 'paytm wallet'],
+    vpaHandles: ['@paytm'],
+    packageNames: ['net.one97.paytm'],
+  },
+  {
+    id: 'amazon_pay',
+    name: 'Amazon Pay',
+    sourceAppType: 'upi_apps',
+    keywords: ['amazon pay', 'amazonpay', 'via amazon pay'],
+    vpaHandles: ['@apl', '@rapl'],
+    packageNames: ['in.amazon.mShop.android.shopping'],
+  },
+  {
+    id: 'bhim',
+    name: 'BHIM UPI',
+    sourceAppType: 'upi_apps',
+    keywords: ['bhim', 'bhim upi', 'npci'],
+    vpaHandles: ['@upi'],
+    packageNames: ['in.org.npci.upiapp'],
+  },
+  {
+    id: 'navi',
+    name: 'Navi UPI',
+    sourceAppType: 'upi_apps',
+    keywords: ['navi upi', 'navi payment'],
+    vpaHandles: ['@navi'],
+    packageNames: ['com.naviapp'],
+  },
+  {
+    id: 'slice',
+    name: 'Slice UPI',
+    sourceAppType: 'upi_apps',
+    keywords: ['slice', 'slice card', 'slice upi'],
+    vpaHandles: ['@slice'],
+    packageNames: ['indwin.c3.shareapp'],
+  },
+  {
+    id: 'jupiter',
+    name: 'Jupiter Money',
+    sourceAppType: 'upi_apps',
+    keywords: ['jupiter money', 'jupiter'],
+    vpaHandles: ['@jupiteraxis'],
+    packageNames: ['money.jupiter'],
+  },
+  {
+    id: 'fi_money',
+    name: 'Fi Money',
+    sourceAppType: 'upi_apps',
+    keywords: ['fi money', 'epifi'],
+    vpaHandles: ['@fibank'],
+    packageNames: ['com.epifi.fi'],
+  },
+  {
+    id: 'mobikwik',
+    name: 'MobiKwik',
+    sourceAppType: 'upi_apps',
+    keywords: ['mobikwik', 'mobi kwik'],
+    vpaHandles: ['@ikwik'],
+    packageNames: ['com.mobikwik_new'],
+  },
+  {
+    id: 'whatsapp_pay',
+    name: 'WhatsApp Pay',
+    sourceAppType: 'upi_apps',
+    keywords: ['whatsapp pay', 'whatsapp payment'],
+    vpaHandles: ['@waicici', '@wahdfcbank', '@wasbi'],
+    packageNames: ['com.whatsapp'],
+  },
+  {
+    id: 'tata_neu',
+    name: 'Tata Neu',
+    sourceAppType: 'upi_apps',
+    keywords: ['tata neu', 'tataneu'],
+    vpaHandles: ['@tataneu'],
+    packageNames: ['com.tatadigital.tcp'],
+  },
+];
+
+// Android Package Names mapping
 export const PACKAGE_TO_SOURCE_MAP: Record<string, MessageSourceApp> = {
   'com.google.android.apps.messaging': 'google_messages',
   'com.truecaller': 'truecaller',
   'com.android.mms': 'carrier_sms',
   'com.samsung.android.messaging': 'carrier_sms',
   'com.motorola.messaging': 'carrier_sms',
-  'com.google.android.apps.nbu.paisa.user': 'bank_apps', // Google Pay
-  'com.phonepe.app': 'bank_apps', // PhonePe
-  'net.one97.paytm': 'bank_apps', // Paytm
-  'com.snapwork.hdfc': 'bank_apps', // HDFC Bank MobileBanking
-  'com.csam.icici.bank.imobile': 'bank_apps', // ICICI iMobile
-  'com.sbi.lotusintouch': 'bank_apps', // SBI Yono
-  'com.axis.mobile': 'bank_apps', // Axis Mobile
+  'com.dreamplug.androidapp': 'cred_pay', // CRED Pay
+  'com.phonepe.app': 'upi_apps', // PhonePe
+  'com.google.android.apps.nbu.paisa.user': 'upi_apps', // Google Pay
+  'net.one97.paytm': 'upi_apps', // Paytm
+  'in.amazon.mShop.android.shopping': 'upi_apps', // Amazon Pay
+  'in.org.npci.upiapp': 'upi_apps', // BHIM
+  'com.snapwork.hdfc': 'bank_apps',
+  'com.csam.icici.bank.imobile': 'bank_apps',
+  'com.sbi.lotusintouch': 'bank_apps',
+  'com.axis.mobile': 'bank_apps',
 };
 
-// Categorization heuristics based on SMS merchant keywords
+// Categorization heuristics based on merchant keywords
 const CATEGORY_KEYWORDS: { keywords: string[]; categoryId: string; activity: AccountingActivity }[] = [
   {
-    keywords: ['swiggy', 'zomato', 'restaurant', 'cafe', 'mcdonald', 'kfc', 'starbucks', 'dominos', 'burger', 'dine', 'food', 'eats', 'pizza', 'haldiram', 'subway'],
+    keywords: ['swiggy', 'zomato', 'restaurant', 'cafe', 'mcdonald', 'kfc', 'starbucks', 'dominos', 'burger', 'dine', 'food', 'eats', 'pizza', 'haldiram', 'subway', 'chai point'],
     categoryId: 'cat_dining',
     activity: 'operating',
   },
@@ -132,9 +257,62 @@ const CATEGORY_KEYWORDS: { keywords: string[]; categoryId: string; activity: Acc
 ];
 
 /**
+ * Identify specific UPI app or universal UPI payment from message content
+ */
+export function identifyUpiApp(
+  sender: string,
+  body: string,
+  sourcePackage?: string
+): { detectedUpiApp?: string; upiVpa?: string; matchedSourceApp?: MessageSourceApp } {
+  const lowerBody = body.toLowerCase();
+  const lowerSender = sender.toLowerCase();
+
+  // 1. Check Package Name
+  if (sourcePackage && PACKAGE_TO_SOURCE_MAP[sourcePackage]) {
+    for (const upi of UPI_REGISTRY) {
+      if (upi.packageNames.includes(sourcePackage)) {
+        return { detectedUpiApp: upi.name, matchedSourceApp: upi.sourceAppType };
+      }
+    }
+  }
+
+  // 2. Extract UPI VPA Handle if present
+  let upiVpa = '';
+  const vpaMatch = body.match(/(?:to|vpa|at|info[:\s]+UPI\/P2[MP]\/|info[:\s]+)(?:UPI\/)?([A-Za-z0-9.\-_]+@[A-Za-z0-9.\-_]+)/i);
+  if (vpaMatch && vpaMatch[1]) {
+    upiVpa = vpaMatch[1].trim();
+  }
+
+  // 3. Match against UPI Registry
+  for (const upi of UPI_REGISTRY) {
+    // Check keywords
+    const keywordMatch = upi.keywords.some((k) => lowerBody.includes(k) || lowerSender.includes(k));
+    // Check VPA handles
+    const vpaMatchFound = upiVpa && upi.vpaHandles.some((h) => upiVpa.toLowerCase().includes(h));
+
+    if (keywordMatch || vpaMatchFound) {
+      return {
+        detectedUpiApp: upi.name,
+        upiVpa: upiVpa || undefined,
+        matchedSourceApp: upi.sourceAppType,
+      };
+    }
+  }
+
+  // 4. Universal UPI fallback: if message mentions UPI/VPA/UTR
+  if (/(?:via upi|upi ref|by upi|vpa|p2m|p2p|utr[:\s])/i.test(lowerBody)) {
+    return {
+      detectedUpiApp: 'UPI Payment',
+      upiVpa: upiVpa || undefined,
+      matchedSourceApp: 'upi_apps',
+    };
+  }
+
+  return { upiVpa: upiVpa || undefined };
+}
+
+/**
  * Generate a canonical transaction fingerprint for cross-app deduplication.
- * Ensures the exact same financial event from Google Messages, Truecaller,
- * and System SMS is not added multiple times to the pending queue.
  */
 export function generateTransactionFingerprint(
   amount: number,
@@ -143,14 +321,12 @@ export function generateTransactionFingerprint(
   date: string,
   rawBody?: string
 ): string {
-  // Normalize account string (e.g. "HDFC Bank (A/c XX1234)" -> "hdfc_1234")
   const normAccount = (sourceAccount || '')
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
 
-  const normAmount = Math.round(amount * 100); // in cents/paise
+  const normAmount = Math.round(amount * 100);
 
-  // Extract merchant snippet if available
   let merchantKey = '';
   if (rawBody) {
     const vpa = rawBody.match(/(?:to|at|vpa|info)\s+([A-Za-z0-9@.\-_]{3,20})/i);
@@ -163,19 +339,36 @@ export function generateTransactionFingerprint(
 }
 
 /**
- * Determines which app provided or formatted the message (Google Messages, Truecaller, Carrier SMS, or Bank App)
+ * Determines which app provided or formatted the message
  */
 export function detectMessageSource(
   sender: string,
   body: string,
   sourcePackage?: string
 ): MessageSourceApp {
-  // If native package identifier is directly provided
   if (sourcePackage && PACKAGE_TO_SOURCE_MAP[sourcePackage]) {
     return PACKAGE_TO_SOURCE_MAP[sourcePackage];
   }
 
   const combined = `${sender} ${body}`.toLowerCase();
+
+  // Check CRED first
+  if (combined.includes('cred pay') || combined.includes('cred club') || combined.includes('credpay') || combined.includes('@cred')) {
+    return 'cred_pay';
+  }
+
+  // Check UPI apps
+  if (
+    combined.includes('phonepe') ||
+    combined.includes('gpay') ||
+    combined.includes('google pay') ||
+    combined.includes('paytm upi') ||
+    combined.includes('amazon pay') ||
+    combined.includes('bhim upi') ||
+    combined.includes('navi upi')
+  ) {
+    return 'upi_apps';
+  }
 
   if (combined.includes('google messages') || combined.includes('rcs chat') || combined.includes('messages by google')) {
     return 'google_messages';
@@ -185,22 +378,11 @@ export function detectMessageSource(
     return 'truecaller';
   }
 
-  if (
-    combined.includes('gpay') ||
-    combined.includes('google pay') ||
-    combined.includes('phonepe') ||
-    combined.includes('paytm upi')
-  ) {
-    return 'bank_apps';
-  }
-
-  // Fallback to carrier / default SMS
   return 'carrier_sms';
 }
 
 /**
- * Parses financial notification or SMS texts from Google Messages, Truecaller,
- * Default Carrier SMS, and Bank Apps.
+ * Universal banking SMS and notification parser
  */
 export function parseBankingSms(
   sender: string,
@@ -212,17 +394,17 @@ export function parseBankingSms(
   const lowerBody = cleanBody.toLowerCase();
   const lowerSender = sender.toLowerCase();
 
-  // 1. Check for core financial triggers
+  // 1. Check for financial keywords
   const hasCurrencyTrigger = /(?:rs\.?|inr|₹|\$|usd|eur|€|gbp|£)/i.test(cleanBody);
-  const hasActionTrigger = /(?:debited|credited|withdrawn|spent|paid|transferred|received|deposited|refund|sent|charged|deducted|autopay)/i.test(lowerBody);
+  const hasActionTrigger = /(?:debited|credited|withdrawn|spent|paid|transferred|received|deposited|refund|sent|charged|deducted|autopay|avl bal|clear bal|balance)/i.test(lowerBody);
 
   if (!hasCurrencyTrigger && !hasActionTrigger) {
     return null;
   }
 
   // 2. Extract Amount
-  // Matches "Rs. 1,234.50", "INR 500", "₹ 2,450", "debited by 450", "paid $45.00", "sent Rs 1200", etc.
-  const amountRegex = /(?:(?:rs\.?|inr|₹|\$|usd|eur|€|gbp|£)\s*([0-9,]+(?:\.[0-9]{1,2})?)|(?:debited|credited|paid|spent|withdrawn|received|sent|transferred|charged|refund(?:ed)?)\s*(?:by|of|for)?\s*(?:rs\.?|inr|₹|\$|usd|eur|€|gbp|£)?\s*([0-9,]+(?:\.[0-9]{1,2})?))/i;
+  // Matches: "Rs. 450", "INR 1,200.50", "₹ 500", "debited by Rs 340", "paid Rs 250", etc.
+  const amountRegex = /(?:(?:rs\.?|inr|₹|\$|usd|eur|€|gbp|£)\s*([0-9,]+(?:\.[0-9]{1,2})?)|(?:debited|credited|paid|spent|withdrawn|received|sent|transferred|charged|refund(?:ed)?)\s*(?:by|of|for|with)?\s*(?:rs\.?|inr|₹|\$|usd|eur|€|gbp|£)?\s*([0-9,]+(?:\.[0-9]{1,2})?))/i;
   const amountMatch = cleanBody.match(amountRegex);
 
   let rawAmount = '';
@@ -232,7 +414,7 @@ export function parseBankingSms(
 
   const amount = parseFloat(rawAmount);
   if (isNaN(amount) || amount <= 0) {
-    return null; // Could not extract valid financial amount
+    return null;
   }
 
   // 3. Determine Transaction Type (Income vs Expense)
@@ -250,7 +432,6 @@ export function parseBankingSms(
   if (accountMatch && accountMatch[1]) {
     accountSuffix = `A/c XX${accountMatch[1]}`;
   } else {
-    // Check for UPI handle or VPA
     const upiMatch = cleanBody.match(/(?:upi\s*ref|vpa|linked to)\s*[*Xx]*([0-9]{3,4})/i);
     if (upiMatch && upiMatch[1]) {
       accountSuffix = `UPI XX${upiMatch[1]}`;
@@ -268,16 +449,17 @@ export function parseBankingSms(
     }
   }
 
-  // Fallback check for common apps
-  if (bankName === 'Bank Account') {
-    if (lowerSender.includes('phonepe') || lowerBody.includes('phonepe')) bankName = 'PhonePe UPI';
-    else if (lowerSender.includes('gpay') || lowerBody.includes('google pay')) bankName = 'Google Pay';
-    else if (lowerSender.includes('paytm') || lowerBody.includes('paytm')) bankName = 'Paytm Payments';
+  // 6. Detect UPI App & VPA
+  const { detectedUpiApp, upiVpa, matchedSourceApp } = identifyUpiApp(sender, cleanBody, sourcePackage);
+
+  // If bankName is still generic and UPI is found
+  if (bankName === 'Bank Account' && detectedUpiApp) {
+    bankName = `${detectedUpiApp}`;
   }
 
   const sourceAccount = accountSuffix ? `${bankName} (${accountSuffix})` : bankName;
 
-  // 6. Smart Category & Activity Matching
+  // 7. Smart Category & Activity Matching
   let suggestedCategoryId = type === 'income' ? 'cat_salary' : 'cat_groceries';
   let activity: AccountingActivity = 'operating';
 
@@ -289,19 +471,21 @@ export function parseBankingSms(
     }
   }
 
-  // 7. Extract Vendor or Summary Notes
+  // 8. Extract Vendor or Summary Notes
   let vendorOrNotes = '';
   const vpaMatch = cleanBody.match(/(?:to|at|vpa|info|paid to|sent to)\s+([A-Za-z0-9.\-_@ ]{3,30})(?:\s+on|\s+ref|\s+avl|\.|$)/i);
   if (vpaMatch && vpaMatch[1]) {
     vendorOrNotes = vpaMatch[1].trim();
+  } else if (detectedUpiApp) {
+    vendorOrNotes = `${type === 'income' ? 'Received via' : 'Paid via'} ${detectedUpiApp}`;
   } else {
     vendorOrNotes = `${type === 'income' ? 'Received into' : 'Paid via'} ${sourceAccount}`;
   }
 
-  // 8. Identify the Source App (Google Messages, Truecaller, Carrier, or Bank App)
-  const detectedSourceApp = forceSource || detectMessageSource(sender, body, sourcePackage);
+  // 9. Source App Attribution
+  const detectedSourceApp = forceSource || matchedSourceApp || detectMessageSource(sender, body, sourcePackage);
 
-  // 9. Generate deduplication fingerprint hash
+  // 10. Generate deduplication fingerprint hash
   const todayIso = getTodayIso();
   const hash = generateTransactionFingerprint(amount, type, sourceAccount, todayIso, cleanBody);
 
@@ -315,6 +499,8 @@ export function parseBankingSms(
     vendorOrNotes,
     detectedSourceApp,
     sourcePackage,
+    detectedUpiApp,
+    upiVpa,
     hash,
   };
 }
@@ -344,6 +530,8 @@ export function createPendingTransactionFromSms(
     detectedAt: Date.now(),
     sourceApp: parsed.detectedSourceApp,
     sourcePackage: parsed.sourcePackage,
+    detectedUpiApp: parsed.detectedUpiApp,
+    upiVpa: parsed.upiVpa,
     hash: parsed.hash,
   };
 }

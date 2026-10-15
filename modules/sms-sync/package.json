@@ -1,0 +1,11 @@
+{
+  "name": "sms-sync",
+  "version": "1.0.0",
+  "description": "Native Android SMS and notification reader module for Home CashFlow",
+  "main": "index.ts",
+  "types": "index.d.ts",
+  "scripts": {},
+  "keywords": ["expo", "react-native", "sms"],
+  "author": "",
+  "license": "MIT"
+}

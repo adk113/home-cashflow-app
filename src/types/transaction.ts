@@ -32,15 +32,18 @@ export interface Category {
 export type EntryMode = 'MANUAL' | 'AUTOMATED';
 
 export type MessageSourceApp =
-  | 'auto' // Auto-detect across all messaging apps with deduplication
+  | 'auto' // Auto-detect across all messaging apps and UPIs with deduplication
+  | 'cred_pay' // CRED Pay & Credit Card transactions
+  | 'upi_apps' // Universal UPI (PhonePe, Paytm, GPay, Amazon Pay, BHIM, Navi, etc.)
   | 'google_messages' // Google Messages (RCS & SMS) - com.google.android.apps.messaging
   | 'truecaller' // Truecaller - com.truecaller
   | 'carrier_sms' // Service Provider / Default Android SMS - content://sms
-  | 'bank_apps'; // Direct UPI & Banking Apps (GPay, PhonePe, Paytm, etc.)
+  | 'bank_apps'; // Direct Bank Mobile Apps (HDFC, SBI, ICICI, etc.)
 
 export interface MessageSourceConfig {
   selectedSource: MessageSourceApp;
   autoDeduplicate: boolean;
+  autoPostToLedger: boolean; // Automatically update ledger without manual 1-by-1 approvals
   syncWindowDays: number;
   lastSyncTimestamp?: number;
   notificationAccessGranted?: boolean;
@@ -60,6 +63,8 @@ export interface PendingSmsTransaction {
   detectedAt: number; // Unix timestamp ms
   sourceApp?: MessageSourceApp;
   sourcePackage?: string; // e.g. 'com.google.android.apps.messaging'
+  detectedUpiApp?: string; // e.g. 'CRED Pay', 'PhonePe', 'Google Pay', 'Paytm', etc.
+  upiVpa?: string; // e.g. 'cred.club@axis', 'swiggy@icici'
   hash?: string; // deduplication fingerprint
 }
 
@@ -76,6 +81,7 @@ export interface Transaction {
   sourceAccount?: string; // e.g. 'Cash', 'HDFC Bank XX12', 'SBI'
   createdAt: number; // Unix timestamp ms
   sourceApp?: MessageSourceApp;
+  detectedUpiApp?: string;
 }
 
 export interface CashFlowStatement {

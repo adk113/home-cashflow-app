@@ -109,12 +109,17 @@ const TransactionRow = React.memo<{
             <Text style={styles.dateText}>{formatDatePretty(item.date)}</Text>
             <Text style={styles.accountDot}>•</Text>
             <Text style={styles.accountText} numberOfLines={1}>{item.sourceAccount || 'Cash'}</Text>
-            {item.entryMode === 'AUTOMATED' && (
+            {item.detectedUpiApp ? (
+              <View style={[styles.autoBadge, { backgroundColor: '#F59E0B20', borderColor: '#F59E0B40' }]}>
+                <Ionicons name="flash" size={8} color="#F59E0B" style={{ marginRight: 2 }} />
+                <Text style={[styles.autoBadgeText, { color: '#F59E0B' }]}>{item.detectedUpiApp}</Text>
+              </View>
+            ) : item.entryMode === 'AUTOMATED' ? (
               <View style={styles.autoBadge}>
                 <Ionicons name="flash" size={8} color={Colors.primary} style={{ marginRight: 2 }} />
                 <Text style={styles.autoBadgeText}>AUTO</Text>
               </View>
-            )}
+            ) : null}
           </View>
         </View>
       </View>

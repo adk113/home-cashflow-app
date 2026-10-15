@@ -43,6 +43,7 @@ interface TransactionContextType {
     entryMode?: EntryMode;
     sourceAccount?: string;
     sourceApp?: MessageSourceApp;
+    detectedUpiApp?: string;
   }) => Promise<void>;
   updateTransaction: (tx: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
@@ -58,6 +59,7 @@ interface TransactionContextType {
   isSyncing: boolean;
   lastSyncResult: SyncResult | null;
   setMessageSource: (source: MessageSourceApp) => Promise<void>;
+  setAutoPostToLedger: (enabled: boolean) => Promise<void>;
   updateMessageSourceConfig: (newConfig: Partial<MessageSourceConfig>) => Promise<void>;
   syncSmsNow: () => Promise<SyncResult>;
   batchImportSms: (text: string, forcedSource?: MessageSourceApp) => Promise<number>;
@@ -152,6 +154,7 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     entryMode?: EntryMode;
     sourceAccount?: string;
     sourceApp?: MessageSourceApp;
+    detectedUpiApp?: string;
   }) => {
     const newTx: Transaction = {
       id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
@@ -166,6 +169,7 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       sourceAccount: data.sourceAccount || 'Cash',
       createdAt: Date.now(),
       sourceApp: data.sourceApp,
+      detectedUpiApp: data.detectedUpiApp,
     };
 
     await TransactionDao.addTransaction(newTx);
@@ -227,6 +231,7 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       entryMode: 'AUTOMATED',
       sourceAccount: found.sourceAccount,
       sourceApp: found.sourceApp,
+      detectedUpiApp: found.detectedUpiApp,
     });
 
     // Remove from pending queue
@@ -240,7 +245,23 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
   ): Promise<PendingSmsTransaction | null> => {
     const detected = createPendingTransactionFromSms(sender, body, sourcePackage);
     if (detected) {
-      await addPendingSms(detected);
+      if (messageSourceConfig.autoPostToLedger) {
+        const cat = categoriesMap.get(detected.suggestedCategoryId);
+        await addTransaction({
+          amount: detected.amount,
+          type: detected.type,
+          activity: cat?.activity || detected.activity,
+          categoryId: detected.suggestedCategoryId,
+          date: detected.date,
+          notes: `${detected.body.slice(0, 70)}...`,
+          entryMode: 'AUTOMATED',
+          sourceAccount: detected.sourceAccount,
+          sourceApp: detected.sourceApp,
+          detectedUpiApp: detected.detectedUpiApp,
+        });
+      } else {
+        await addPendingSms(detected);
+      }
       return detected;
     }
     return null;
@@ -249,6 +270,11 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
   // Message Source & SMS Sync Center Actions
   const setMessageSource = async (source: MessageSourceApp) => {
     const updated = await smsSyncService.setSelectedSource(source);
+    setMessageSourceConfigState(updated);
+  };
+
+  const setAutoPostToLedger = async (enabled: boolean) => {
+    const updated = await smsSyncService.setAutoPostToLedger(enabled);
     setMessageSourceConfigState(updated);
   };
 
@@ -263,11 +289,40 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       const result = await smsSyncService.syncNow(pendingSms, transactions);
 
       if (result.items && result.items.length > 0) {
-        // Save newly detected transactions to storage
-        for (const item of result.items) {
-          await TransactionDao.savePendingSms(item);
+        if (messageSourceConfig.autoPostToLedger) {
+          // Immediately post detected SMS transactions directly into the ledger!
+          const newTxs: Transaction[] = [];
+          for (const item of result.items) {
+            const chosenCategoryId = item.suggestedCategoryId;
+            const cat = categoriesMap.get(chosenCategoryId);
+            const chosenActivity = cat?.activity || item.activity;
+
+            const newTx: Transaction = {
+              id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+              userId: currentUser?.id,
+              amount: item.amount,
+              type: item.type,
+              activity: chosenActivity,
+              categoryId: chosenCategoryId,
+              date: item.date,
+              notes: `${item.body.slice(0, 80)}`,
+              entryMode: 'AUTOMATED',
+              sourceAccount: item.sourceAccount,
+              sourceApp: item.sourceApp,
+              detectedUpiApp: item.detectedUpiApp,
+              createdAt: Date.now(),
+            };
+            await TransactionDao.addTransaction(newTx);
+            newTxs.push(newTx);
+          }
+          setTransactions((prev) => [...newTxs, ...prev]);
+        } else {
+          // Save newly detected transactions to pending review queue
+          for (const item of result.items) {
+            await TransactionDao.savePendingSms(item);
+          }
+          setPendingSms((prev) => [...result.items, ...prev]);
         }
-        setPendingSms((prev) => [...result.items, ...prev]);
       }
 
       setLastSyncResult(result);
@@ -281,10 +336,35 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
   const batchImportSms = async (text: string, forcedSource?: MessageSourceApp): Promise<number> => {
     const { items } = smsSyncService.parseBatchText(text, pendingSms, transactions, forcedSource);
     if (items.length > 0) {
-      for (const item of items) {
-        await TransactionDao.savePendingSms(item);
+      if (messageSourceConfig.autoPostToLedger) {
+        const newTxs: Transaction[] = [];
+        for (const item of items) {
+          const cat = categoriesMap.get(item.suggestedCategoryId);
+          const newTx: Transaction = {
+            id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+            userId: currentUser?.id,
+            amount: item.amount,
+            type: item.type,
+            activity: cat?.activity || item.activity,
+            categoryId: item.suggestedCategoryId,
+            date: item.date,
+            notes: `${item.body.slice(0, 80)}`,
+            entryMode: 'AUTOMATED',
+            sourceAccount: item.sourceAccount,
+            sourceApp: item.sourceApp,
+            detectedUpiApp: item.detectedUpiApp,
+            createdAt: Date.now(),
+          };
+          await TransactionDao.addTransaction(newTx);
+          newTxs.push(newTx);
+        }
+        setTransactions((prev) => [...newTxs, ...prev]);
+      } else {
+        for (const item of items) {
+          await TransactionDao.savePendingSms(item);
+        }
+        setPendingSms((prev) => [...items, ...prev]);
       }
-      setPendingSms((prev) => [...items, ...prev]);
     }
     return items.length;
   };
@@ -332,6 +412,7 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         isSyncing,
         lastSyncResult,
         setMessageSource,
+        setAutoPostToLedger,
         updateMessageSourceConfig,
         syncSmsNow,
         batchImportSms,

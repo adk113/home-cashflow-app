@@ -24,6 +24,7 @@ export const MessageSourceModal: React.FC<MessageSourceModalProps> = ({ visible,
   const {
     messageSourceConfig,
     setMessageSource,
+    setAutoPostToLedger,
     updateMessageSourceConfig,
     openNotificationSettings,
     requestSmsPermission,
@@ -35,6 +36,10 @@ export const MessageSourceModal: React.FC<MessageSourceModalProps> = ({ visible,
 
   const handleToggleDeduplication = async (val: boolean) => {
     await updateMessageSourceConfig({ autoDeduplicate: val });
+  };
+
+  const handleToggleAutoPost = async (val: boolean) => {
+    await setAutoPostToLedger(val);
   };
 
   const handleSetSyncRange = async (days: number) => {
@@ -127,6 +132,21 @@ export const MessageSourceModal: React.FC<MessageSourceModalProps> = ({ visible,
 
             {/* Settings & Deduplication */}
             <Text style={[styles.sectionHeading, { marginTop: 18 }]}>SYNC & DEDUPLICATION SETTINGS:</Text>
+
+            <View style={styles.settingRow}>
+              <View style={{ flex: 1, marginRight: 12 }}>
+                <Text style={styles.settingTitle}>Auto-Post Directly to Ledger</Text>
+                <Text style={styles.settingSubtext}>
+                  Immediately updates your CashFlow and expense ledger when bank SMS / UPI is detected, without waiting for manual confirmation.
+                </Text>
+              </View>
+              <Switch
+                value={messageSourceConfig.autoPostToLedger}
+                onValueChange={handleToggleAutoPost}
+                trackColor={{ false: '#334155', true: '#10B981' }}
+                thumbColor="#FFFFFF"
+              />
+            </View>
 
             <View style={styles.settingRow}>
               <View style={{ flex: 1, marginRight: 12 }}>

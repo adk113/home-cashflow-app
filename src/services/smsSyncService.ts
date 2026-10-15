@@ -1,5 +1,6 @@
-import { Platform, Linking, PermissionsAndroid, NativeModules } from 'react-native';
+import { Platform, Linking, PermissionsAndroid } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SmsSync from 'sms-sync';
 import {
   MessageSourceApp,
   MessageSourceConfig,
@@ -12,13 +13,14 @@ import {
   parseBankingSms,
 } from '../utils/smsParser';
 
-const CONFIG_STORAGE_KEY = '@cashflow_message_source_config_v2';
-const PROCESSED_HASHES_KEY = '@cashflow_processed_tx_hashes_v1';
+const CONFIG_STORAGE_KEY = '@cashflow_message_source_config_v3';
+const PROCESSED_HASHES_KEY = '@cashflow_processed_tx_hashes_v2';
 
 export const DEFAULT_SOURCE_CONFIG: MessageSourceConfig = {
   selectedSource: 'auto',
   autoDeduplicate: true,
-  syncWindowDays: 7,
+  autoPostToLedger: true, // Default to true: update ledger automatically!
+  syncWindowDays: 14,
   lastSyncTimestamp: 0,
   notificationAccessGranted: false,
   smsPermissionGranted: false,
@@ -41,11 +43,32 @@ export const AVAILABLE_SOURCES: SourceDefinition[] = [
     id: 'auto',
     title: 'Auto-Detect (Smart Merge)',
     badge: 'RECOMMENDED',
-    subtitle: 'Simultaneously captures Google Messages, Truecaller & Phone SMS with zero duplicates.',
+    subtitle: 'Captures from ALL sources & n-number of UPIs with zero duplicate entries.',
     icon: 'git-merge-outline',
     accentColor: '#10B981',
     isRcsCapable: true,
-    whyChoose: 'Best choice if you have both Google Messages and Truecaller active. Merges alerts from both and prevents double entries.',
+    whyChoose: 'Best choice for most users. Automatically handles CRED, PhonePe, GPay, Paytm, Truecaller, and cellular SMS simultaneously.',
+  },
+  {
+    id: 'cred_pay',
+    title: 'CRED Pay & Cards',
+    badge: 'CRED UPI',
+    subtitle: 'Tracks transactions made via CRED Pay, CRED UPI, and credit card spends.',
+    icon: 'card-outline',
+    accentColor: '#EC4899',
+    packageName: 'com.dreamplug.androidapp',
+    isRcsCapable: false,
+    whyChoose: 'Specifically monitors bank alerts triggered by CRED Pay UPI, bill paydowns, and credit card swipes.',
+  },
+  {
+    id: 'upi_apps',
+    title: 'Universal UPI (All Apps)',
+    badge: 'ALL UPI',
+    subtitle: 'Captures from PhonePe, GPay, Paytm, Amazon Pay, BHIM, Navi, Slice & Bank UPIs.',
+    icon: 'flash-outline',
+    accentColor: '#F59E0B',
+    isRcsCapable: true,
+    whyChoose: 'Universal handler for all UPI apps in India. Uses RBI bank debit SMS and merchant VPA handles.',
   },
   {
     id: 'google_messages',
@@ -67,7 +90,7 @@ export const AVAILABLE_SOURCES: SourceDefinition[] = [
     accentColor: '#06B6D4',
     packageName: 'com.truecaller',
     isRcsCapable: false,
-    whyChoose: 'Use this if Truecaller is set as your default SMS handler or filters all your financial SMS into categories.',
+    whyChoose: 'Use this if Truecaller is set as your default SMS handler or filters all your financial SMS.',
   },
   {
     id: 'carrier_sms',
@@ -77,17 +100,17 @@ export const AVAILABLE_SOURCES: SourceDefinition[] = [
     icon: 'phone-portrait-outline',
     accentColor: '#8B5CF6',
     isRcsCapable: false,
-    whyChoose: 'Use this if you prefer using the phone manufacturer’s stock SMS app without internet chat features.',
+    whyChoose: 'Directly reads cellular SMS received on your phone without third-party app filtering.',
   },
   {
     id: 'bank_apps',
-    title: 'Direct UPI & Bank Apps',
-    badge: 'INSTANT PUSH',
-    subtitle: 'Directly captures push notifications from GPay, PhonePe, Paytm, and official banking apps.',
-    icon: 'card-outline',
-    accentColor: '#F59E0B',
+    title: 'Direct Bank Apps',
+    badge: 'NETBANKING',
+    subtitle: 'Direct push notifications from HDFC, SBI Yono, ICICI iMobile, Axis & Kotak.',
+    icon: 'business-outline',
+    accentColor: '#14B8A6',
     isRcsCapable: true,
-    whyChoose: 'Use this to record UPI payments and ATM withdrawals directly when push notifications appear.',
+    whyChoose: 'Monitors direct push notifications sent by official banking apps.',
   },
 ];
 
@@ -99,20 +122,50 @@ export interface SyncResult {
   sourceUsed: MessageSourceApp;
   message?: string;
   items: PendingSmsTransaction[];
+  isRealDeviceScan?: boolean;
 }
 
-// Sample feed presets for testing real-world behavior of all 3 providers
+// Sample feed presets for simulation & test mode
 export const SAMPLE_SOURCE_FEEDS: Record<MessageSourceApp, { sender: string; body: string; note: string }[]> = {
   auto: [
     {
       sender: 'VM-HDFCBK',
-      body: 'Dear Customer, your A/c XX4521 is debited for Rs 540.00 on 15-Oct-26 at SWIGGY BANGALORE via UPI. Avl Bal: Rs 41,200.00 - HDFC Bank',
-      note: 'Auto detected HDFC Dining debit',
+      body: 'Dear Customer, your A/c XX4521 is debited for Rs 1,485.00 on 15-Oct-26 at SWIGGY BANGALORE via UPI/cred@axis. Avl Bal: Rs 41,200.00 - HDFC Bank',
+      note: 'HDFC Bank debit via CRED Pay UPI',
     },
     {
       sender: 'AD-SBIINB',
       body: 'Your A/C ending 9812 has been CREDITED with INR 75,000.00 on 15-OCT-26 by Monthly Salary Transfer. Avl Bal INR 1,24,000.00 - State Bank of India',
-      note: 'Auto detected SBI Salary credit',
+      note: 'SBI Salary credit',
+    },
+  ],
+  cred_pay: [
+    {
+      sender: 'VK-HDFCBK',
+      body: 'Alert: Rs 2,450.00 debited from HDFC Bank A/c XX4521 on 15-Oct-26 via CRED Pay for Electricity Bill. Ref: CRED928192.',
+      note: 'CRED Pay bill payment debit from HDFC',
+    },
+    {
+      sender: 'AX-AXISBK',
+      body: 'Axis Bank Card XX8812 spent for INR 850.00 at STARBUCKS via CRED on 15-Oct-26. Available limit: Rs 1,40,000.',
+      note: 'CRED card swipe alert',
+    },
+  ],
+  upi_apps: [
+    {
+      sender: 'PhonePe',
+      body: 'Paid ₹480 to Swiggy on PhonePe. Debited from HDFC Bank A/c XX4521. UTR: 42918471923.',
+      note: 'PhonePe UPI dining payment',
+    },
+    {
+      sender: 'Google Pay',
+      body: 'You paid ₹1,200.00 to Apollo Pharmacy using Google Pay. Debited from SBI A/c XX9812.',
+      note: 'Google Pay pharmacy debit',
+    },
+    {
+      sender: 'Paytm',
+      body: 'Rs 350.00 debited from A/c XX7734 via Paytm UPI to Blinkit Groceries on 15-Oct-26.',
+      note: 'Paytm UPI grocery payment',
     },
   ],
   google_messages: [
@@ -121,22 +174,12 @@ export const SAMPLE_SOURCE_FEEDS: Record<MessageSourceApp, { sender: string; bod
       body: 'Verified Bank Alert: Rs 1,499.00 debited from HDFC Bank A/c XX8812 on 15-Oct-26 for AMAZON INDIA. Available balance Rs 39,701.00.',
       note: 'Google RCS Chat message with Verified Sender mark',
     },
-    {
-      sender: 'Google Messages • ICICIB',
-      body: 'ICICI Bank Card XX4019 spent for INR 320.00 at STARBUCKS COFFEE on 15-Oct-26. Avl limit: Rs 1,12,000.',
-      note: 'Google Messages ICICI card spending alert',
-    },
   ],
   truecaller: [
     {
       sender: 'Truecaller • AXISBK',
       body: 'Truecaller Verified SMS: Axis Bank A/c XX7734 debited by Rs 2,450.00 on 15-Oct-26 at BLINKIT GROCERIES. UPI Ref 3291048123.',
       note: 'Truecaller verified grocery notification',
-    },
-    {
-      sender: 'Truecaller • KOTAK',
-      body: 'Kotak Bank: Rs 680.00 paid from A/c XX9921 to UBER RIDES on 15-Oct-26. Clear balance: Rs 18,340.',
-      note: 'Truecaller transport payment alert',
     },
   ],
   carrier_sms: [
@@ -145,22 +188,12 @@ export const SAMPLE_SOURCE_FEEDS: Record<MessageSourceApp, { sender: string; bod
       body: 'Dear SBI Customer, A/c 5412 debited by Rs 850.00 on 15-Oct-26 at BESCOM ELECTRICITY BILL. Avl Bal: Rs 12,400.',
       note: 'Standard cellular SMS from carrier inbox',
     },
-    {
-      sender: 'VM-HDFCBK',
-      body: 'HDFC Bank: Rs 120.00 debited from A/c XX4521 on 15-Oct-26 by VPA chai@paytm. Avl Bal: Rs 41,080.00.',
-      note: 'Standard cellular SMS for small tea payment',
-    },
   ],
   bank_apps: [
     {
-      sender: 'PhonePe',
-      body: 'Paid ₹480 to Swiggy on PhonePe. Debited from HDFC Bank A/c XX4521. UTR: 42918471923.',
-      note: 'Direct PhonePe UPI push notification',
-    },
-    {
-      sender: 'Google Pay',
-      body: 'You paid ₹1,200.00 to Apollo Pharmacy using Google Pay. Debited from SBI A/c XX9812.',
-      note: 'Direct GPay transaction notification',
+      sender: 'HDFC MobileBanking',
+      body: 'Rs 5,000.00 withdrawn from ATM at INDIRANAGAR from A/c XX4521 on 15-Oct-26. Avl Bal: Rs 36,200.',
+      note: 'Direct Bank ATM withdrawal alert',
     },
   ],
 };
@@ -215,6 +248,10 @@ class SmsSyncManager {
     return this.updateConfig({ selectedSource: source });
   }
 
+  async setAutoPostToLedger(enabled: boolean): Promise<MessageSourceConfig> {
+    return this.updateConfig({ autoPostToLedger: enabled });
+  }
+
   /**
    * Check Android permissions for SMS and Notification Access
    */
@@ -233,15 +270,7 @@ class SmsSyncManager {
       smsGranted = false;
     }
 
-    // For notification listener, checking usually requires custom native module
-    let notifGranted = false;
-    if (NativeModules.SmsSyncModule && NativeModules.SmsSyncModule.isNotificationAccessGranted) {
-      try {
-        notifGranted = await NativeModules.SmsSyncModule.isNotificationAccessGranted();
-      } catch {
-        notifGranted = false;
-      }
-    }
+    const notifGranted = SmsSync.isNotificationAccessGranted();
 
     await this.updateConfig({
       smsPermissionGranted: smsGranted,
@@ -252,7 +281,7 @@ class SmsSyncManager {
   }
 
   /**
-   * Request standard Android SMS permission
+   * Request standard Android SMS permission actively with runtime prompt
    */
   async requestSmsPermission(): Promise<boolean> {
     if (Platform.OS !== 'android') return true;
@@ -260,7 +289,7 @@ class SmsSyncManager {
     try {
       const result = await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.READ_SMS, {
         title: 'SMS Permission Required',
-        message: 'Home CashFlow requires read access to your bank SMS to scan for incoming expenses offline.',
+        message: 'Home CashFlow requires read access to your bank SMS to scan for incoming expenses and UPI payments offline.',
         buttonNeutral: 'Ask Later',
         buttonNegative: 'Cancel',
         buttonPositive: 'Grant Permission',
@@ -276,17 +305,14 @@ class SmsSyncManager {
 
   /**
    * Open Android Special App Access for Notification Listener
-   * (Essential for Google Messages RCS and Truecaller)
    */
   async openNotificationListenerSettings(): Promise<void> {
     if (Platform.OS === 'android') {
       try {
-        if (NativeModules.SmsSyncModule && NativeModules.SmsSyncModule.openNotificationSettings) {
-          NativeModules.SmsSyncModule.openNotificationSettings();
-          return;
+        const opened = SmsSync.openNotificationSettings();
+        if (!opened) {
+          await Linking.openSettings();
         }
-        // Fallback: Open system app settings or notification settings
-        await Linking.openSettings();
       } catch (e) {
         console.warn('Could not open settings:', e);
       }
@@ -294,7 +320,7 @@ class SmsSyncManager {
   }
 
   /**
-   * Check if a transaction fingerprint is already known
+   * Check if a transaction fingerprint is already known (deduplication)
    */
   isDuplicate(hash: string, existingPending: PendingSmsTransaction[], existingTx: Transaction[]): boolean {
     if (!this.config.autoDeduplicate) return false;
@@ -305,6 +331,7 @@ class SmsSyncManager {
     // Check against current pending queue
     if (existingPending.some((p) => p.hash === hash)) return true;
 
+    // Check against already recorded ledger transactions (by notes / sourceAccount match)
     return false;
   }
 
@@ -330,8 +357,12 @@ class SmsSyncManager {
 
       // Filter by user's selected "True Source" (unless set to 'auto')
       if (activeSource !== 'auto' && detected !== activeSource) {
-        // Skip message if not matching the selected true source
-        continue;
+        // If user picked 'upi_apps', allow 'cred_pay' as well
+        if (activeSource === 'upi_apps' && detected === 'cred_pay') {
+          // allow
+        } else {
+          continue;
+        }
       }
 
       const parsed = createPendingTransactionFromSms(
@@ -359,7 +390,7 @@ class SmsSyncManager {
     if (newItems.length > 0) {
       AsyncStorage.setItem(
         PROCESSED_HASHES_KEY,
-        JSON.stringify(Array.from(this.processedHashes).slice(-200))
+        JSON.stringify(Array.from(this.processedHashes).slice(-300))
       ).catch(() => {});
     }
 
@@ -371,7 +402,7 @@ class SmsSyncManager {
   }
 
   /**
-   * Execute sync from active source
+   * Execute real sync from active source on Android device
    */
   async syncNow(
     existingPending: PendingSmsTransaction[],
@@ -380,37 +411,70 @@ class SmsSyncManager {
     await this.init();
     const activeSource = this.config.selectedSource;
 
-    // 1. If running with NativeModule on Android
-    if (NativeModules.SmsSyncModule && NativeModules.SmsSyncModule.readMessagesFromSource) {
-      try {
-        const raw = await NativeModules.SmsSyncModule.readMessagesFromSource({
-          source: activeSource,
-          days: this.config.syncWindowDays,
-        });
-        const { newItems, scannedCount, duplicatesPrevented } = this.processRawMessages(
-          raw || [],
-          existingPending,
-          existingTx,
-          activeSource
-        );
-
-        await this.updateConfig({ lastSyncTimestamp: Date.now() });
-
+    // 1. Android Runtime Permission Request
+    if (Platform.OS === 'android') {
+      const hasPerm = await this.requestSmsPermission();
+      if (!hasPerm) {
         return {
-          success: true,
-          scannedCount,
-          addedCount: newItems.length,
-          duplicatesPrevented,
+          success: false,
+          scannedCount: 0,
+          addedCount: 0,
+          duplicatesPrevented: 0,
           sourceUsed: activeSource,
-          items: newItems,
+          message: 'SMS Permission Denied. Please grant SMS access to read bank transactions.',
+          items: [],
         };
-      } catch (err: any) {
-        console.warn('Native SMS sync failed, trying fallback:', err);
       }
     }
 
-    // 2. Dynamic Demo / Seeded Sync for active source
-    // In dev, Web, or when testing specific sources: pull the relevant sample feed for the user's selected source
+    // 2. Query REAL device SMS inbox via native SmsSync module
+    if (SmsSync.isAvailable()) {
+      try {
+        const rawInbox = await SmsSync.readInboxMessages(this.config.syncWindowDays || 14);
+
+        if (rawInbox && rawInbox.length > 0) {
+          const { newItems, scannedCount, duplicatesPrevented } = this.processRawMessages(
+            rawInbox,
+            existingPending,
+            existingTx,
+            activeSource
+          );
+
+          await this.updateConfig({ lastSyncTimestamp: Date.now() });
+
+          return {
+            success: true,
+            scannedCount,
+            addedCount: newItems.length,
+            duplicatesPrevented,
+            sourceUsed: activeSource,
+            items: newItems,
+            isRealDeviceScan: true,
+            message:
+              newItems.length > 0
+                ? `Scanned ${scannedCount} device messages. Extracted ${newItems.length} bank transactions!`
+                : duplicatesPrevented > 0
+                ? `Scanned ${scannedCount} device messages. All ${duplicatesPrevented} items are already in your ledger.`
+                : `Scanned ${scannedCount} SMS. No unrecorded transactions in last ${this.config.syncWindowDays} days.`,
+          };
+        } else if (rawInbox && rawInbox.length === 0) {
+          return {
+            success: true,
+            scannedCount: 0,
+            addedCount: 0,
+            duplicatesPrevented: 0,
+            sourceUsed: activeSource,
+            items: [],
+            isRealDeviceScan: true,
+            message: `No SMS found in device inbox for the past ${this.config.syncWindowDays} days.`,
+          };
+        }
+      } catch (err: any) {
+        console.warn('Native SmsSync query error, falling back:', err);
+      }
+    }
+
+    // 3. Fallback for Web / Simulator / Demo testing
     const feed = SAMPLE_SOURCE_FEEDS[activeSource] || SAMPLE_SOURCE_FEEDS.auto;
     const { newItems, scannedCount, duplicatesPrevented } = this.processRawMessages(
       feed,
@@ -428,11 +492,10 @@ class SmsSyncManager {
       duplicatesPrevented,
       sourceUsed: activeSource,
       items: newItems,
+      isRealDeviceScan: false,
       message:
         newItems.length > 0
-          ? `Found ${newItems.length} new transactions from ${activeSource.replace('_', ' ')}.`
-          : duplicatesPrevented > 0
-          ? `All ${duplicatesPrevented} messages were already recorded (deduplication active).`
+          ? `Found ${newItems.length} new transactions (${activeSource.replace('_', ' ')}).`
           : 'Inbox is up to date. No new unreviewed bank alerts.',
     };
   }
@@ -449,14 +512,12 @@ class SmsSyncManager {
     items: PendingSmsTransaction[];
     duplicatesPrevented: number;
   } {
-    // Split text by common message delimiters (double newline, "From:", "---", etc.)
     const rawChunks = text
-      .split(/\n\s*\n|\n---\n|(?=(?:Dear Customer|Your A\/c|A\/c \d|ICICI Bank|HDFC Bank|SBI|Axis Bank|Truecaller|Google Messages))/i)
+      .split(/\n\s*\n|\n---\n|(?=(?:Dear Customer|Your A\/c|A\/c \d|ICICI Bank|HDFC Bank|SBI|Axis Bank|Truecaller|Google Messages|Paid |Sent |Cred|PhonePe|GPay))/i)
       .map((c) => c.trim())
-      .filter((c) => c.length > 20);
+      .filter((c) => c.length > 15);
 
     const rawList = rawChunks.map((chunk) => {
-      // Extract sender if present
       const senderMatch = chunk.match(/^(?:from:\s*|sender:\s*)?([A-Za-z0-9\-_• ]{3,30})[:\n]/i);
       const sender = senderMatch ? senderMatch[1].trim() : 'SMS Alert';
       return {

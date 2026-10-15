@@ -15,7 +15,8 @@
     "react-native": "0.86.3",
     "react-native-svg": "15.15.4",
     "react-native-web": "^0.21.2",
-    "serve": "^14.2.6"
+    "serve": "^14.2.6",
+    "sms-sync": "file:./modules/sms-sync"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",

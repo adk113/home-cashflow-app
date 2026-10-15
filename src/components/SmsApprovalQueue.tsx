@@ -34,6 +34,7 @@ export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
 }) => {
   const {
     messageSourceConfig,
+    setAutoPostToLedger,
     syncSmsNow,
     isSyncing,
     lastSyncResult,
@@ -52,14 +53,18 @@ export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
       setSyncFeedback('');
       const result = await syncSmsNow();
       if (result.addedCount > 0) {
-        setSyncFeedback(`Added ${result.addedCount} new transaction(s) to queue!`);
+        if (messageSourceConfig.autoPostToLedger) {
+          setSyncFeedback(`✅ Added & posted ${result.addedCount} transaction(s) directly to your ledger!`);
+        } else {
+          setSyncFeedback(`Added ${result.addedCount} new transaction(s) to approval queue!`);
+        }
       } else if (result.duplicatesPrevented > 0) {
         setSyncFeedback(`Up to date. ${result.duplicatesPrevented} duplicate alert(s) prevented.`);
       } else {
-        setSyncFeedback('Inbox up to date. No new unreviewed bank alerts found.');
+        setSyncFeedback(`Inbox scanned (${messageSourceConfig.syncWindowDays || 14} days). No new unrecorded bank alerts found.`);
       }
-    } catch {
-      setSyncFeedback('Sync check completed.');
+    } catch (e: any) {
+      setSyncFeedback(`Sync note: ${e?.message || 'Completed'}`);
     }
   };
 
@@ -77,8 +82,31 @@ export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
     }
   };
 
-  const getSourceBadgeInfo = (sourceApp?: MessageSourceApp) => {
+  const getSourceBadgeInfo = (sourceApp?: MessageSourceApp, detectedUpiApp?: string) => {
+    if (detectedUpiApp) {
+      const lower = detectedUpiApp.toLowerCase();
+      if (lower.includes('cred')) {
+        return { label: 'CRED Pay', color: '#EC4899', icon: 'card-outline' };
+      }
+      if (lower.includes('phonepe')) {
+        return { label: 'PhonePe', color: '#6739B7', icon: 'flash-outline' };
+      }
+      if (lower.includes('google') || lower.includes('gpay')) {
+        return { label: 'Google Pay', color: '#4285F4', icon: 'flash-outline' };
+      }
+      if (lower.includes('paytm')) {
+        return { label: 'Paytm', color: '#00BAF2', icon: 'wallet-outline' };
+      }
+      if (lower.includes('amazon')) {
+        return { label: 'Amazon Pay', color: '#FF9900', icon: 'cart-outline' };
+      }
+      return { label: detectedUpiApp, color: '#F59E0B', icon: 'flash-outline' };
+    }
     switch (sourceApp) {
+      case 'cred_pay':
+        return { label: 'CRED Pay', color: '#EC4899', icon: 'card-outline' };
+      case 'upi_apps':
+        return { label: 'Universal UPI', color: '#F59E0B', icon: 'flash-outline' };
       case 'google_messages':
         return { label: 'Google Messages (RCS)', color: '#3B82F6', icon: 'chatbubbles-outline' };
       case 'truecaller':
@@ -152,7 +180,7 @@ export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
             ) : (
               <Ionicons name="sync" size={15} color="#0B0F19" style={{ marginRight: 6 }} />
             )}
-            <Text style={styles.syncNowBtnText}>{isSyncing ? 'Scanning Inbox...' : 'Sync Messages Now'}</Text>
+            <Text style={styles.syncNowBtnText}>{isSyncing ? 'Scanning Inbox & UPI...' : 'Sync Device SMS & UPI Now'}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -165,11 +193,38 @@ export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
           </TouchableOpacity>
         </View>
 
+        {/* Auto-Post Mode Indicator & Quick Toggle */}
+        <TouchableOpacity
+          style={[
+            styles.autoPostBar,
+            messageSourceConfig.autoPostToLedger ? styles.autoPostBarActive : styles.autoPostBarInactive,
+          ]}
+          onPress={() => setAutoPostToLedger(!messageSourceConfig.autoPostToLedger)}
+          activeOpacity={0.7}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1 }}>
+            <Ionicons
+              name={messageSourceConfig.autoPostToLedger ? 'flash' : 'time-outline'}
+              size={14}
+              color={messageSourceConfig.autoPostToLedger ? '#10B981' : '#F59E0B'}
+              style={{ marginRight: 6 }}
+            />
+            <Text style={styles.autoPostBarText}>
+              {messageSourceConfig.autoPostToLedger
+                ? 'Auto-Post to Ledger: ON (Direct Instant Updates)'
+                : 'Auto-Post to Ledger: OFF (Queue for Review)'}
+            </Text>
+          </View>
+          <Text style={[styles.autoPostToggleBtn, { color: messageSourceConfig.autoPostToLedger ? '#10B981' : Colors.textMuted }]}>
+            {messageSourceConfig.autoPostToLedger ? 'Active' : 'Enable'}
+          </Text>
+        </TouchableOpacity>
+
         {/* Explanatory Footnote */}
         <View style={styles.footerNoteRow}>
           <Ionicons name="shield-checkmark" size={12} color={Colors.textMuted} style={{ marginRight: 4 }} />
           <Text style={styles.footerNoteText}>
-            Deduplication: {messageSourceConfig.autoDeduplicate ? 'ON (Zero Double Entries)' : 'OFF'} • Offline local SQLite
+            Universal UPI (CRED, PhonePe, Paytm, GPay, Amazon) • Zero-cloud SQLite
           </Text>
         </View>
 
@@ -249,7 +304,7 @@ export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
       {/* Queue Items */}
       {queue.map((item) => {
         const isIncome = item.type === 'income';
-        const srcBadge = getSourceBadgeInfo(item.sourceApp);
+        const srcBadge = getSourceBadgeInfo(item.sourceApp, item.detectedUpiApp);
 
         return (
           <View key={item.id} style={styles.pendingCard}>
@@ -267,6 +322,13 @@ export const SmsApprovalQueue: React.FC<SmsApprovalQueueProps> = ({
                   <Ionicons name={srcBadge.icon as any} size={11} color={srcBadge.color} style={{ marginRight: 3 }} />
                   <Text style={[styles.itemSourcePillText, { color: srcBadge.color }]}>{srcBadge.label}</Text>
                 </View>
+
+                {item.detectedUpiApp ? (
+                  <View style={styles.upiCardPill}>
+                    <Ionicons name="flash" size={10} color="#F59E0B" style={{ marginRight: 3 }} />
+                    <Text style={styles.upiCardPillText}>{item.detectedUpiApp}</Text>
+                  </View>
+                ) : null}
               </View>
 
               <Text style={[styles.amountText, { color: isIncome ? Colors.inflow : Colors.outflow }]}>
@@ -668,5 +730,50 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#0B0F19',
     fontWeight: '700',
+  },
+  autoPostBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 7,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginTop: 8,
+    marginBottom: 4,
+  },
+  autoPostBarActive: {
+    backgroundColor: '#10B98115',
+    borderColor: '#10B98140',
+  },
+  autoPostBarInactive: {
+    backgroundColor: '#F59E0B15',
+    borderColor: '#F59E0B40',
+  },
+  autoPostBarText: {
+    fontSize: 11,
+    color: '#E2E8F0',
+    fontWeight: '600',
+  },
+  autoPostToggleBtn: {
+    fontSize: 11,
+    fontWeight: '700',
+    marginLeft: 6,
+  },
+  upiCardPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#F59E0B20',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 0.5,
+    borderColor: '#F59E0B40',
+    marginTop: 2,
+  },
+  upiCardPillText: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: '#F59E0B',
   },
 });

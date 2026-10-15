@@ -48,6 +48,24 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
         date TEXT NOT NULL,
         detected_at INTEGER NOT NULL,
         source_app TEXT,
+        detected_upi_app TEXT,
+        hash TEXT
+      );
+
+      CREATE TABLE IF NOT EXISTS pending_sms_queue (
+        id TEXT PRIMARY KEY,
+        sender TEXT NOT NULL,
+        body TEXT NOT NULL,
+        amount REAL NOT NULL,
+        type TEXT NOT NULL,
+        activity TEXT NOT NULL,
+        suggested_category_id TEXT NOT NULL,
+        source_account TEXT NOT NULL,
+        date TEXT NOT NULL,
+        detected_at INTEGER NOT NULL,
+        source_app TEXT,
+        detected_upi_app TEXT,
+        upi_vpa TEXT,
         hash TEXT
       );
 
@@ -56,7 +74,7 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
       CREATE INDEX IF NOT EXISTS idx_transactions_entry_mode ON transactions(entry_mode);
     `);
 
-    // Migration helper: Ensure entry_mode, source_account, source_app, hash columns exist
+    // Migration helper: Ensure entry_mode, source_account, source_app, detected_upi_app, hash columns exist
     try {
       const txInfo = this.db.getAllSync('PRAGMA table_info(transactions);');
       const txCols = txInfo.map((col: any) => col.name);
@@ -69,11 +87,20 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
       if (!txCols.includes('source_app')) {
         this.db.execSync('ALTER TABLE transactions ADD COLUMN source_app TEXT;');
       }
+      if (!txCols.includes('detected_upi_app')) {
+        this.db.execSync('ALTER TABLE transactions ADD COLUMN detected_upi_app TEXT;');
+      }
 
       const smsInfo = this.db.getAllSync('PRAGMA table_info(pending_sms_queue);');
       const smsCols = smsInfo.map((col: any) => col.name);
       if (!smsCols.includes('source_app')) {
         this.db.execSync('ALTER TABLE pending_sms_queue ADD COLUMN source_app TEXT;');
+      }
+      if (!smsCols.includes('detected_upi_app')) {
+        this.db.execSync('ALTER TABLE pending_sms_queue ADD COLUMN detected_upi_app TEXT;');
+      }
+      if (!smsCols.includes('upi_vpa')) {
+        this.db.execSync('ALTER TABLE pending_sms_queue ADD COLUMN upi_vpa TEXT;');
       }
       if (!smsCols.includes('hash')) {
         this.db.execSync('ALTER TABLE pending_sms_queue ADD COLUMN hash TEXT;');
@@ -127,12 +154,14 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
       entryMode: (r.entry_mode as EntryMode) || 'MANUAL',
       sourceAccount: r.source_account || 'Cash',
       createdAt: Number(r.created_at),
+      sourceApp: r.source_app || undefined,
+      detectedUpiApp: r.detected_upi_app || undefined,
     }));
   }
 
   async insertTransaction(tx: Transaction): Promise<void> {
     this.db.runSync(
-      'INSERT INTO transactions (id, amount, type, activity, category_id, date, notes, entry_mode, source_account, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO transactions (id, amount, type, activity, category_id, date, notes, entry_mode, source_account, created_at, source_app, detected_upi_app) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         tx.id,
         tx.amount,
@@ -144,13 +173,15 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
         tx.entryMode || 'MANUAL',
         tx.sourceAccount || 'Cash',
         tx.createdAt,
+        tx.sourceApp || null,
+        tx.detectedUpiApp || null,
       ]
     );
   }
 
   async updateTransaction(tx: Transaction): Promise<void> {
     this.db.runSync(
-      'UPDATE transactions SET amount = ?, type = ?, activity = ?, category_id = ?, date = ?, notes = ?, entry_mode = ?, source_account = ? WHERE id = ?',
+      'UPDATE transactions SET amount = ?, type = ?, activity = ?, category_id = ?, date = ?, notes = ?, entry_mode = ?, source_account = ?, source_app = ?, detected_upi_app = ? WHERE id = ?',
       [
         tx.amount,
         tx.type,
@@ -160,6 +191,8 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
         tx.notes || null,
         tx.entryMode || 'MANUAL',
         tx.sourceAccount || 'Cash',
+        tx.sourceApp || null,
+        tx.detectedUpiApp || null,
         tx.id,
       ]
     );
@@ -199,13 +232,15 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
       date: r.date,
       detectedAt: Number(r.detected_at),
       sourceApp: r.source_app || undefined,
+      detectedUpiApp: r.detected_upi_app || undefined,
+      upiVpa: r.upi_vpa || undefined,
       hash: r.hash || undefined,
     }));
   }
 
   async savePendingSms(sms: PendingSmsTransaction): Promise<void> {
     this.db.runSync(
-      'INSERT OR REPLACE INTO pending_sms_queue (id, sender, body, amount, type, activity, suggested_category_id, source_account, date, detected_at, source_app, hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT OR REPLACE INTO pending_sms_queue (id, sender, body, amount, type, activity, suggested_category_id, source_account, date, detected_at, source_app, detected_upi_app, upi_vpa, hash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         sms.id,
         sms.sender,
@@ -218,6 +253,8 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
         sms.date,
         sms.detectedAt,
         sms.sourceApp || null,
+        sms.detectedUpiApp || null,
+        sms.upiVpa || null,
         sms.hash || null,
       ]
     );
