@@ -44,3 +44,7 @@ yarn-error.*
 *.db
 *.sqlite
 *.sqlite3
+
+# gradle
+.gradle/
+*.gradle/
