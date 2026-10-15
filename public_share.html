@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Share Home CashFlow Tracker</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background-color: #0B0F19;
+      color: #E2E8F0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 32px 16px;
+    }
+    .header { text-align: center; margin-bottom: 32px; max-width: 600px; }
+    .badge {
+      display: inline-block;
+      background: rgba(16, 185, 129, 0.15);
+      color: #10B981;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 12px;
+      letter-spacing: 0.5px;
+    }
+    h1 { font-size: 28px; font-weight: 800; color: #FFFFFF; margin-bottom: 8px; }
+    p.subtitle { font-size: 14px; color: #94A3B8; line-height: 1.5; }
+    .cards-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 24px;
+      max-width: 820px;
+      width: 100%;
+    }
+    .card {
+      background: #111827;
+      border: 1px solid #1E293B;
+      border-radius: 20px;
+      padding: 24px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.4);
+    }
+    .card-tag {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 0.5px;
+      padding: 4px 10px;
+      border-radius: 8px;
+      margin-bottom: 12px;
+    }
+    .card-tag.web { background: rgba(56, 189, 248, 0.15); color: #38BDF8; }
+    .card-tag.apk { background: rgba(16, 185, 129, 0.15); color: #10B981; }
+    .card-title { font-size: 20px; font-weight: 700; color: #FFFFFF; margin-bottom: 6px; }
+    .card-desc { font-size: 12px; color: #94A3B8; margin-bottom: 20px; line-height: 1.4; }
+    .qr-wrapper {
+      background: #FFFFFF;
+      padding: 14px;
+      border-radius: 16px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+    }
+    .qr-wrapper img { width: 200px; height: 200px; display: block; }
+    .action-btn {
+      width: 100%;
+      padding: 12px 20px;
+      border-radius: 12px;
+      text-decoration: none;
+      font-weight: 700;
+      font-size: 14px;
+      display: inline-block;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+    .btn-web { background: #38BDF8; color: #0B0F19; }
+    .btn-apk { background: #10B981; color: #0B0F19; }
+    .action-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+    .guide-box {
+      margin-top: 14px;
+      background: #1E293B;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 11px;
+      color: #94A3B8;
+      text-align: left;
+      line-height: 1.5;
+      width: 100%;
+    }
+    .guide-box strong { color: #E2E8F0; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="badge">VERSION 1.0.5 RELEASE</div>
+    <h1>Home CashFlow Tracker</h1>
+    <p class="subtitle">Household cash flow statement, multi-currency ledger, and offline SMS sync. Scan a QR code or click below to launch.</p>
+  </div>
+
+  <div class="cards-grid">
+    <!-- Web / iOS Card -->
+    <div class="card">
+      <div class="card-tag web">IOS, TABLETS & WEB</div>
+      <h2 class="card-title">Instant Web App</h2>
+      <p class="card-desc">No installation needed. Scan with iPhone camera to open immediately in Safari.</p>
+      <div class="qr-wrapper">
+        <img src="data:image/png;base64,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" alt="QR Code for Web App">
+      </div>
+      <a class="action-btn btn-web" href="https://home-cashflow-app.onrender.com" target="_blank">Open Web App</a>
+      <div class="guide-box">
+        <strong>📱 iPhone Tip:</strong> Tap <em>Share</em> in Safari and select <em>"Add to Home Screen"</em> to run full-screen as a standalone native app!
+      </div>
+    </div>
+
+    <!-- Android APK Card -->
+    <div class="card">
+      <div class="card-tag apk">ANDROID NATIVE (v1.0.5)</div>
+      <h2 class="card-title">Download Android APK</h2>
+      <p class="card-desc">Includes offline background SMS & Notification listener for Google Messages & Truecaller.</p>
+      <div class="qr-wrapper">
+        <img src="data:image/png;base64,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" alt="QR Code for Android APK">
+      </div>
+      <a class="action-btn btn-apk" href="https://expo.dev/artifacts/eas/w0jFTol7KpC1rTHZND-UrykySDUVJ-Yntrrlf-IrfB0.apk" download>Download APK File</a>
+      <div class="guide-box">
+        <strong>⚡ Android Tip:</strong> Tap to download directly onto your device. When prompted, select <em>"Install anyway"</em> for the preview build.
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -27,8 +27,13 @@ const server = http.createServer((req, res) => {
 
   let filePath = path.join(DIST_DIR, reqPath);
 
-  // If file doesn't exist, fall back to index.html for Single Page Application routing
-  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+  if (reqPath === '/share' || reqPath === '/share.html') {
+    const publicSharePath = path.join(__dirname, 'public_share.html');
+    if (fs.existsSync(publicSharePath)) {
+      filePath = publicSharePath;
+    }
+  } else if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    // If file doesn't exist, fall back to index.html for Single Page Application routing
     filePath = path.join(DIST_DIR, 'index.html');
   }
 
