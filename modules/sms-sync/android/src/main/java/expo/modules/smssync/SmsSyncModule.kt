@@ -44,7 +44,7 @@ class SmsSyncModule : Module() {
     AsyncFunction("readInboxMessages") { days: Int ->
       val context = appContext.reactContext ?: return@AsyncFunction emptyList<Map<String, Any>>()
       val results = mutableListOf<Map<String, Any>>()
-      val safeDays = if (days <= 0) 7 else days
+      val safeDays = if (days <= 0) 14 else days
       val cutoff = System.currentTimeMillis() - (safeDays.toLong() * 24L * 60L * 60L * 1000L)
       val uri = Uri.parse("content://sms/inbox")
 
@@ -85,13 +85,52 @@ class SmsSyncModule : Module() {
             }
           } while (cursor.moveToNext())
         }
-      } catch (e: Exception) {
-        e.printStackTrace()
+      } catch (e: Throwable) {
+        CrashLogger.log(context, "readInboxMessages", e)
       } finally {
         cursor?.close()
       }
 
       results
+    }
+
+    AsyncFunction("getPendingRawMessages") {
+      val context = appContext.reactContext ?: return@AsyncFunction emptyList<Map<String, Any>>()
+      try {
+        val db = RawSmsDatabaseHelper.getInstance(context)
+        db.getUnprocessedMessages(100)
+      } catch (e: Throwable) {
+        CrashLogger.log(context, "getPendingRawMessages", e)
+        emptyList<Map<String, Any>>()
+      }
+    }
+
+    AsyncFunction("markRawMessagesProcessed") { ids: List<Int> ->
+      val context = appContext.reactContext ?: return@AsyncFunction false
+      try {
+        val db = RawSmsDatabaseHelper.getInstance(context)
+        db.markProcessed(ids)
+        true
+      } catch (e: Throwable) {
+        CrashLogger.log(context, "markRawMessagesProcessed", e)
+        false
+      }
+    }
+
+    Function("getCrashLogs") {
+      val context = appContext.reactContext ?: return@Function ""
+      CrashLogger.readLogs(context)
+    }
+
+    Function("clearCrashLogs") {
+      val context = appContext.reactContext ?: return@Function false
+      CrashLogger.clearLogs(context)
+    }
+
+    Function("logCrash") { source: String, message: String ->
+      val context = appContext.reactContext ?: return@Function false
+      CrashLogger.log(context, source, message)
+      true
     }
   }
 }

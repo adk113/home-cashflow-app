@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,13 +12,17 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../theme/colors';
+import { ThemePalette } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { User } from '../types/transaction';
 
 const AVATAR_OPTIONS = ['👨‍💼', '👩‍💼', '🏡', '🧑‍💻', '👨‍👩‍👧', '💼', '🚀', '🎯'];
 
 export const AuthScreen: React.FC = () => {
+  const { colors, isDark, toggleTheme } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
+
   const { users, loginWithPin, loginWithEmail, registerUser, deleteUser } = useAuth();
   
   const hasUsers = users.length > 0;
@@ -117,71 +121,92 @@ export const AuthScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.background} />
-      <ScrollView contentContainerStyle={styles.container} showsVerticalScrollIndicator={false}>
-        {/* App Branding */}
-        <View style={styles.brandHeader}>
-          <View style={styles.logoBadge}>
-            <Ionicons name="pie-chart" size={32} color="#0B0F19" />
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
+
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        {/* Top Header with Theme Toggle */}
+        <View style={styles.topHeader}>
+          <View style={{ width: 36 }} />
+          <View style={styles.header}>
+            <View style={styles.logoBadge}>
+              <Ionicons name="pie-chart" size={32} color={colors.primary} />
+            </View>
+            <Text style={styles.appTitle}>Home CashFlow</Text>
+            <Text style={styles.appTagline}>Corporate Statement of Cash Flows for Households</Text>
           </View>
-          <Text style={styles.appName}>Home CashFlow</Text>
-          <Text style={styles.appTagline}>Private Household Financial Ledger</Text>
+          <TouchableOpacity
+            style={styles.themeToggleBtn}
+            onPress={toggleTheme}
+            activeOpacity={0.7}
+            accessibilityLabel="Toggle Theme"
+          >
+            <Ionicons
+              name={isDark ? 'sunny' : 'moon'}
+              size={18}
+              color={isDark ? '#F59E0B' : colors.primary}
+            />
+          </TouchableOpacity>
         </View>
 
-        {/* Tab Toggle: Only shown if at least 1 account exists */}
-        {hasUsers && (
-          <View style={styles.tabToggle}>
+        {/* Tab Switcher */}
+        <View style={styles.tabContainer}>
+          {hasUsers && (
             <TouchableOpacity
-              style={[styles.tabBtn, activeTab === 'profiles' && styles.tabBtnActive]}
+              style={[styles.tab, activeTab === 'profiles' && styles.tabActive]}
               onPress={() => {
                 setActiveTab('profiles');
                 setErrorMessage('');
               }}
             >
-              <Text style={[styles.tabBtnText, activeTab === 'profiles' && styles.tabBtnTextActive]}>
-                Profiles ({users.length})
+              <Text style={[styles.tabText, activeTab === 'profiles' && styles.tabTextActive]}>
+                Profiles
               </Text>
             </TouchableOpacity>
+          )}
 
-            <TouchableOpacity
-              style={[styles.tabBtn, activeTab === 'email' && styles.tabBtnActive]}
-              onPress={() => {
-                setActiveTab('email');
-                setErrorMessage('');
-              }}
-            >
-              <Text style={[styles.tabBtnText, activeTab === 'email' && styles.tabBtnTextActive]}>
-                Email Login
-              </Text>
-            </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'email' && styles.tabActive]}
+            onPress={() => {
+              setActiveTab('email');
+              setErrorMessage('');
+            }}
+          >
+            <Text style={[styles.tabText, activeTab === 'email' && styles.tabTextActive]}>
+              Email Login
+            </Text>
+          </TouchableOpacity>
 
-            <TouchableOpacity
-              style={[styles.tabBtn, activeTab === 'register' && styles.tabBtnActive]}
-              onPress={() => {
-                setActiveTab('register');
-                setErrorMessage('');
-              }}
-            >
-              <Text style={[styles.tabBtnText, activeTab === 'register' && styles.tabBtnTextActive]}>
-                + Add Profile
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'register' && styles.tabActive]}
+            onPress={() => {
+              setActiveTab('register');
+              setErrorMessage('');
+            }}
+          >
+            <Text style={[styles.tabText, activeTab === 'register' && styles.tabTextActive]}>
+              + New Profile
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-        {/* Error Alert Banner */}
+        {/* Error message alert */}
         {errorMessage ? (
-          <View style={styles.errorBanner}>
-            <Ionicons name="alert-circle" size={16} color="#F43F5E" style={{ marginRight: 6 }} />
+          <View style={styles.errorBox}>
+            <Ionicons name="alert-circle" size={16} color={colors.outflow} style={{ marginRight: 6 }} />
             <Text style={styles.errorText}>{errorMessage}</Text>
           </View>
         ) : null}
 
-        {/* TAB 1: Household Profiles Quick Login (Only when accounts exist) */}
-        {hasUsers && activeTab === 'profiles' && (
+        {/* Profiles Tab */}
+        {activeTab === 'profiles' && hasUsers && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Select Your Profile</Text>
-            <Text style={styles.cardSubtitle}>Choose your account and enter your 4-digit PIN</Text>
+            <Text style={styles.cardTitle}>Select Household Member</Text>
+            <Text style={styles.cardSubtitle}>
+              Choose your profile and enter your PIN to unlock the ledger
+            </Text>
 
             <View style={styles.profileGrid}>
               {users.map((u) => {
@@ -195,18 +220,24 @@ export const AuthScreen: React.FC = () => {
                       setPin('');
                       setErrorMessage('');
                     }}
-                    activeOpacity={0.7}
+                    activeOpacity={0.8}
                   >
-                    <Text style={styles.avatarEmoji}>{u.avatar}</Text>
-                    <Text style={[styles.profileName, isSelected && styles.profileNameSelected]} numberOfLines={1}>
+                    <Text style={styles.avatarEmoji}>{u.avatar || '👤'}</Text>
+                    <Text
+                      style={[styles.profileName, isSelected && styles.profileNameSelected]}
+                      numberOfLines={1}
+                    >
                       {u.name}
                     </Text>
-                    <Text style={styles.profileEmail} numberOfLines={1}>
-                      {u.role === 'primary' ? 'Primary' : 'Member'}
-                    </Text>
+                    {u.email ? (
+                      <Text style={styles.profileEmail} numberOfLines={1}>
+                        {u.email}
+                      </Text>
+                    ) : null}
+
                     {isSelected && (
                       <View style={styles.selectedCheck}>
-                        <Ionicons name="checkmark-circle" size={16} color={Colors.primary} />
+                        <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
                       </View>
                     )}
                   </TouchableOpacity>
@@ -214,144 +245,154 @@ export const AuthScreen: React.FC = () => {
               })}
             </View>
 
-            {/* PIN Entry for Selected Profile */}
             {selectedUser && (
               <View style={styles.pinSection}>
-                <Text style={styles.pinLabel}>Enter PIN for {selectedUser.name}</Text>
+                <Text style={styles.pinLabel}>Enter 4-Digit Security PIN</Text>
                 <TextInput
                   style={styles.pinInput}
-                  placeholder="••••"
-                  placeholderTextColor={Colors.textMuted}
                   value={pin}
                   onChangeText={setPin}
                   keyboardType="numeric"
-                  secureTextEntry={true}
-                  maxLength={6}
+                  secureTextEntry
+                  maxLength={4}
+                  placeholder="••••"
+                  placeholderTextColor={colors.placeholder}
+                  onSubmitEditing={handleProfileLogin}
                 />
 
-                <TouchableOpacity style={styles.submitBtn} onPress={handleProfileLogin}>
-                  <Text style={styles.submitBtnText}>Sign In</Text>
+                <TouchableOpacity
+                  style={styles.submitBtn}
+                  onPress={handleProfileLogin}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.submitBtnText}>Unlock Household Ledger</Text>
                 </TouchableOpacity>
 
-                {users.length > 1 && (
-                  <TouchableOpacity
-                    style={styles.deleteProfileBtn}
-                    onPress={() => confirmDeleteProfile(selectedUser)}
-                  >
-                    <Text style={styles.deleteProfileText}>Remove Profile from Phone</Text>
-                  </TouchableOpacity>
-                )}
+                <TouchableOpacity
+                  style={styles.deleteProfileBtn}
+                  onPress={() => confirmDeleteProfile(selectedUser)}
+                >
+                  <Text style={styles.deleteProfileText}>Delete Profile</Text>
+                </TouchableOpacity>
               </View>
             )}
           </View>
         )}
 
-        {/* TAB 2: Email & Password/PIN Login */}
-        {hasUsers && activeTab === 'email' && (
+        {/* Email Login Tab */}
+        {activeTab === 'email' && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>Account Sign In</Text>
-            <Text style={styles.cardSubtitle}>Sign in using your registered email and PIN</Text>
+            <Text style={styles.cardTitle}>Sign in with Email</Text>
+            <Text style={styles.cardSubtitle}>
+              Use your registered email and 4-digit PIN
+            </Text>
 
             <Text style={styles.inputLabel}>Email Address</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="e.g. name@example.com"
-              placeholderTextColor={Colors.textMuted}
               value={emailInput}
               onChangeText={setEmailInput}
-              keyboardType="email-address"
+              placeholder="e.g. aditya@home.local"
+              placeholderTextColor={colors.placeholder}
               autoCapitalize="none"
+              keyboardType="email-address"
             />
 
-            <Text style={styles.inputLabel}>Security PIN</Text>
+            <Text style={styles.inputLabel}>4-Digit PIN</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="••••"
-              placeholderTextColor={Colors.textMuted}
               value={emailPin}
               onChangeText={setEmailPin}
+              placeholder="4-digit PIN"
+              placeholderTextColor={colors.placeholder}
               keyboardType="numeric"
-              secureTextEntry={true}
-              maxLength={6}
+              secureTextEntry
+              maxLength={4}
+              onSubmitEditing={handleEmailLogin}
             />
 
-            <TouchableOpacity style={styles.submitBtn} onPress={handleEmailLogin}>
-              <Text style={styles.submitBtnText}>Sign In</Text>
+            <TouchableOpacity
+              style={styles.submitBtn}
+              onPress={handleEmailLogin}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.submitBtnText}>Log In</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* TAB 3 / ONBOARDING: Create Profile (Shown on fresh install or when adding member) */}
-        {(!hasUsers || activeTab === 'register') && (
+        {/* Register Tab */}
+        {activeTab === 'register' && (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>
-              {hasUsers ? 'Add Household Member' : 'Welcome! Setup Your Profile'}
-            </Text>
+            <Text style={styles.cardTitle}>Create Household Profile</Text>
             <Text style={styles.cardSubtitle}>
-              {hasUsers
-                ? 'Create a separate profile for another family member on this phone.'
-                : 'Create your private account. All financial records stay 100% offline on your device.'}
+              Set up a local profile for expense tracking and bank statement analysis
             </Text>
 
-            {/* Avatar Picker */}
             <Text style={styles.inputLabel}>Choose Avatar</Text>
             <View style={styles.avatarRow}>
               {AVATAR_OPTIONS.map((av) => (
                 <TouchableOpacity
                   key={av}
-                  style={[styles.avatarChoice, regAvatar === av && styles.avatarChoiceSelected]}
+                  style={[
+                    styles.avatarChoice,
+                    regAvatar === av && styles.avatarChoiceSelected,
+                  ]}
                   onPress={() => setRegAvatar(av)}
                 >
-                  <Text style={{ fontSize: 22 }}>{av}</Text>
+                  <Text style={{ fontSize: 24 }}>{av}</Text>
                 </TouchableOpacity>
               ))}
             </View>
 
-            <Text style={styles.inputLabel}>Your Name / Household Name</Text>
+            <Text style={styles.inputLabel}>Profile Name *</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="e.g. My Household, Alex, or Home"
-              placeholderTextColor={Colors.textMuted}
               value={regName}
               onChangeText={setRegName}
+              placeholder="e.g. Aditya or Family"
+              placeholderTextColor={colors.placeholder}
             />
 
             <Text style={styles.inputLabel}>Email (Optional)</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="(Optional) e.g. you@example.com"
-              placeholderTextColor={Colors.textMuted}
               value={regEmail}
               onChangeText={setRegEmail}
-              keyboardType="email-address"
+              placeholder="e.g. aditya@home.local"
+              placeholderTextColor={colors.placeholder}
               autoCapitalize="none"
+              keyboardType="email-address"
             />
 
-            <Text style={styles.inputLabel}>4-Digit Security PIN (Default: 1234)</Text>
+            <Text style={styles.inputLabel}>Security PIN (Optional 4 digits)</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="1234"
-              placeholderTextColor={Colors.textMuted}
               value={regPin}
               onChangeText={setRegPin}
+              placeholder="Leave empty for no PIN"
+              placeholderTextColor={colors.placeholder}
               keyboardType="numeric"
-              secureTextEntry={true}
-              maxLength={6}
+              secureTextEntry
+              maxLength={4}
+              onSubmitEditing={handleRegister}
             />
 
-            <TouchableOpacity style={styles.submitBtn} onPress={handleRegister}>
-              <Text style={styles.submitBtnText}>
-                {hasUsers ? 'Create Profile' : 'Create Account & Enter'}
-              </Text>
+            <TouchableOpacity
+              style={styles.submitBtn}
+              onPress={handleRegister}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.submitBtnText}>Create Profile & Open Ledger</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Footer Note */}
+        {/* Privacy Note */}
         <View style={styles.footerNote}>
-          <Ionicons name="shield-checkmark" size={14} color={Colors.inflow} style={{ marginRight: 6 }} />
+          <Ionicons name="lock-closed-outline" size={12} color={colors.textMuted} style={{ marginRight: 5 }} />
           <Text style={styles.footerText}>
-            100% Private & Offline • Encrypted on device
+            100% Private • Offline SQLite Engine • Zero Cloud Sync
           </Text>
         </View>
       </ScrollView>
@@ -359,243 +400,265 @@ export const AuthScreen: React.FC = () => {
   );
 };
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
-  container: {
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 30 : 20,
-    paddingBottom: 40,
-    alignItems: 'center',
-  },
-  brandHeader: {
-    alignItems: 'center',
-    marginBottom: 24,
-  },
-  logoBadge: {
-    width: 60,
-    height: 60,
-    borderRadius: 18,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-  },
-  appName: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-    letterSpacing: -0.5,
-  },
-  appTagline: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
-  tabToggle: {
-    flexDirection: 'row',
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 4,
-    marginBottom: 20,
-    width: '100%',
-    maxWidth: 400,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 8,
-  },
-  tabBtnActive: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  tabBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textMuted,
-  },
-  tabBtnTextActive: {
-    color: Colors.primary,
-  },
-  errorBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(244, 63, 94, 0.12)',
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 10,
-    marginBottom: 16,
-    width: '100%',
-    maxWidth: 400,
-    borderWidth: 1,
-    borderColor: 'rgba(244, 63, 94, 0.3)',
-  },
-  errorText: {
-    color: '#F43F5E',
-    fontSize: 12,
-    flex: 1,
-  },
-  card: {
-    backgroundColor: Colors.card,
-    borderRadius: 18,
-    padding: 20,
-    width: '100%',
-    maxWidth: 400,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  cardSubtitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 4,
-    marginBottom: 16,
-    lineHeight: 18,
-  },
-  profileGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginBottom: 16,
-  },
-  profileTile: {
-    flex: 1,
-    minWidth: '45%',
-    backgroundColor: Colors.surface,
-    borderRadius: 14,
-    padding: 12,
-    alignItems: 'center',
-    borderWidth: 1.5,
-    borderColor: Colors.cardBorder,
-    position: 'relative',
-  },
-  profileTileSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.08)',
-  },
-  avatarEmoji: {
-    fontSize: 32,
-    marginBottom: 6,
-  },
-  profileName: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    textAlign: 'center',
-  },
-  profileNameSelected: {
-    color: Colors.primary,
-  },
-  profileEmail: {
-    fontSize: 10,
-    color: Colors.textMuted,
-    marginTop: 2,
-    textAlign: 'center',
-  },
-  selectedCheck: {
-    position: 'absolute',
-    top: 8,
-    right: 8,
-  },
-  pinSection: {
-    marginTop: 10,
-    borderTopWidth: 1,
-    borderTopColor: Colors.cardBorder,
-    paddingTop: 16,
-  },
-  pinLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  pinInput: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    paddingVertical: 12,
-    fontSize: 22,
-    fontWeight: '800',
-    letterSpacing: 10,
-    color: Colors.primary,
-    textAlign: 'center',
-    marginBottom: 14,
-  },
-  inputLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    marginBottom: 6,
-    marginTop: 10,
-  },
-  textInput: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    fontSize: 14,
-    color: Colors.textPrimary,
-    marginBottom: 6,
-  },
-  avatarRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  avatarChoice: {
-    padding: 6,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  avatarChoiceSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-  },
-  submitBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  submitBtnText: {
-    color: '#0B0F19',
-    fontSize: 14,
-    fontWeight: '700',
-  },
-  deleteProfileBtn: {
-    alignItems: 'center',
-    marginTop: 12,
-    paddingVertical: 6,
-  },
-  deleteProfileText: {
-    color: '#F43F5E',
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  footerNote: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 24,
-  },
-  footerText: {
-    fontSize: 12,
-    color: Colors.textMuted,
-  },
-});
+const getStyles = (colors: ThemePalette) =>
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    scrollContent: {
+      flexGrow: 1,
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingTop: Platform.OS === 'android' ? 36 : 20,
+      paddingBottom: 40,
+    },
+    topHeader: {
+      flexDirection: 'row',
+      width: '100%',
+      justifyContent: 'space-between',
+      alignItems: 'flex-start',
+      marginBottom: 8,
+    },
+    themeToggleBtn: {
+      width: 36,
+      height: 36,
+      borderRadius: 18,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    header: {
+      alignItems: 'center',
+      flex: 1,
+    },
+    logoBadge: {
+      width: 64,
+      height: 64,
+      borderRadius: 16,
+      backgroundColor: colors.primaryMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 12,
+    },
+    appTitle: {
+      fontSize: 24,
+      fontWeight: '800',
+      color: colors.textPrimary,
+      letterSpacing: -0.5,
+    },
+    appTagline: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 4,
+      textAlign: 'center',
+      maxWidth: 280,
+    },
+    tabContainer: {
+      flexDirection: 'row',
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 4,
+      marginTop: 20,
+      marginBottom: 16,
+      width: '100%',
+      maxWidth: 400,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    tab: {
+      flex: 1,
+      paddingVertical: 8,
+      alignItems: 'center',
+      borderRadius: 8,
+    },
+    tabActive: {
+      backgroundColor: colors.primary,
+    },
+    tabText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    tabTextActive: {
+      color: colors.primaryText,
+      fontWeight: '700',
+    },
+    errorBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: `${colors.outflow}15`,
+      borderWidth: 1,
+      borderColor: `${colors.outflow}35`,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 10,
+      marginBottom: 14,
+      width: '100%',
+      maxWidth: 400,
+    },
+    errorText: {
+      color: colors.outflow,
+      fontSize: 12,
+      fontWeight: '600',
+      flex: 1,
+    },
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 20,
+      padding: 20,
+      width: '100%',
+      maxWidth: 400,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    cardTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    cardSubtitle: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      marginTop: 4,
+      marginBottom: 16,
+      lineHeight: 18,
+    },
+    profileGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+      marginBottom: 16,
+    },
+    profileTile: {
+      flex: 1,
+      minWidth: '45%',
+      backgroundColor: colors.surface,
+      borderRadius: 14,
+      padding: 12,
+      alignItems: 'center',
+      borderWidth: 1.5,
+      borderColor: colors.cardBorder,
+      position: 'relative',
+    },
+    profileTileSelected: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primaryMuted,
+    },
+    avatarEmoji: {
+      fontSize: 32,
+      marginBottom: 6,
+    },
+    profileName: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      textAlign: 'center',
+    },
+    profileNameSelected: {
+      color: colors.primary,
+    },
+    profileEmail: {
+      fontSize: 10,
+      color: colors.textMuted,
+      marginTop: 2,
+      textAlign: 'center',
+    },
+    selectedCheck: {
+      position: 'absolute',
+      top: 8,
+      right: 8,
+    },
+    pinSection: {
+      marginTop: 10,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+      paddingTop: 16,
+    },
+    pinLabel: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textPrimary,
+      marginBottom: 8,
+      textAlign: 'center',
+    },
+    pinInput: {
+      backgroundColor: colors.inputBg,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.inputBorder,
+      paddingVertical: 12,
+      fontSize: 22,
+      fontWeight: '800',
+      letterSpacing: 10,
+      color: colors.primary,
+      textAlign: 'center',
+      marginBottom: 14,
+    },
+    inputLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      marginBottom: 6,
+      marginTop: 10,
+    },
+    textInput: {
+      backgroundColor: colors.inputBg,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.inputBorder,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      fontSize: 14,
+      color: colors.textPrimary,
+      marginBottom: 6,
+    },
+    avatarRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 10,
+    },
+    avatarChoice: {
+      padding: 6,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: 'transparent',
+    },
+    avatarChoiceSelected: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primaryMuted,
+    },
+    submitBtn: {
+      backgroundColor: colors.primary,
+      borderRadius: 12,
+      paddingVertical: 14,
+      alignItems: 'center',
+      marginTop: 16,
+    },
+    submitBtnText: {
+      color: colors.primaryText,
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    deleteProfileBtn: {
+      alignItems: 'center',
+      marginTop: 12,
+      paddingVertical: 6,
+    },
+    deleteProfileText: {
+      color: colors.outflow,
+      fontSize: 11,
+      fontWeight: '600',
+    },
+    footerNote: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 24,
+    },
+    footerText: {
+      fontSize: 12,
+      color: colors.textMuted,
+    },
+  });

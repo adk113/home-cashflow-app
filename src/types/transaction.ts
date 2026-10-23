@@ -82,6 +82,7 @@ export interface Transaction {
   createdAt: number; // Unix timestamp ms
   sourceApp?: MessageSourceApp;
   detectedUpiApp?: string;
+  rawSms?: string; // Complete, unedited raw SMS/notification string for audit verification
 }
 
 export interface CashFlowStatement {

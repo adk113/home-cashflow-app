@@ -45,13 +45,21 @@ const withAndroidSmsAndNotifications = (config) => {
     if (!app.receiver) {
       app.receiver = [];
     }
-    const hasSmsReceiver = app.receiver.some(
-      (r) => r.$ && r.$['android:name'] === '.sms.SmsBroadcastReceiver'
+
+    // Clean any legacy unqualified receiver
+    app.receiver = app.receiver.filter(
+      (r) => !r.$ || r.$['android:name'] !== '.sms.SmsBroadcastReceiver'
     );
+
+    const receiverName = 'expo.modules.smssync.SmsBroadcastReceiver';
+    const hasSmsReceiver = app.receiver.some(
+      (r) => r.$ && r.$['android:name'] === receiverName
+    );
+
     if (!hasSmsReceiver) {
       app.receiver.push({
         $: {
-          'android:name': '.sms.SmsBroadcastReceiver',
+          'android:name': receiverName,
           'android:enabled': 'true',
           'android:exported': 'true',
           'android:permission': 'android.permission.BROADCAST_SMS',
@@ -69,13 +77,21 @@ const withAndroidSmsAndNotifications = (config) => {
     if (!app.service) {
       app.service = [];
     }
-    const hasNotifService = app.service.some(
-      (s) => s.$ && s.$['android:name'] === '.sms.CashflowNotificationListenerService'
+
+    // Clean any legacy unqualified service
+    app.service = app.service.filter(
+      (s) => !s.$ || s.$['android:name'] !== '.sms.CashflowNotificationListenerService'
     );
+
+    const serviceName = 'expo.modules.smssync.CashflowNotificationListenerService';
+    const hasNotifService = app.service.some(
+      (s) => s.$ && s.$['android:name'] === serviceName
+    );
+
     if (!hasNotifService) {
       app.service.push({
         $: {
-          'android:name': '.sms.CashflowNotificationListenerService',
+          'android:name': serviceName,
           'android:label': 'Home CashFlow Bank Alert Sync',
           'android:permission': 'android.permission.BIND_NOTIFICATION_LISTENER_SERVICE',
           'android:exported': 'true',

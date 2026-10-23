@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,8 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../theme/colors';
+import { ThemePalette } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { formatDatePretty } from '../utils/formatters';
 
 interface DatePickerModalProps {
@@ -62,6 +63,9 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
   onSelectDate,
   onClose,
 }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
+
   // Parse incoming date or fallback to today
   const initialDate = selectedDate ? new Date(selectedDate + 'T00:00:00') : new Date();
   const validInitial = isNaN(initialDate.getTime()) ? new Date() : initialDate;
@@ -129,18 +133,18 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
     <Modal visible={visible} animationType="fade" transparent={true} onRequestClose={onClose}>
       <Pressable style={styles.overlay} onPress={onClose}>
         <Pressable style={styles.dialogCard} onPress={(e) => e.stopPropagation()}>
-          {/* Header with Title & Close */}
+          {/* Header */}
           <View style={styles.header}>
             <View style={styles.headerTitleWrap}>
-              <Ionicons name="calendar" size={18} color={Colors.primary} style={{ marginRight: 8 }} />
+              <Ionicons name="calendar" size={18} color={colors.primary} style={{ marginRight: 8 }} />
               <Text style={styles.headerTitle}>Select Date</Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color={Colors.textSecondary} />
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
-          {/* Quick Presets (Today, Yesterday) */}
+          {/* Quick Presets: Today & Yesterday */}
           <View style={styles.presetRow}>
             <TouchableOpacity
               style={[styles.presetBtn, selectedDate === todayIso && styles.presetBtnActive]}
@@ -171,10 +175,10 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
             </TouchableOpacity>
           </View>
 
-          {/* Month / Year Navigator */}
+          {/* Month & Year Navigator */}
           <View style={styles.monthNavRow}>
             <TouchableOpacity onPress={handlePrevMonth} style={styles.navArrowBtn}>
-              <Ionicons name="chevron-back" size={20} color={Colors.textPrimary} />
+              <Ionicons name="chevron-back" size={16} color={colors.textPrimary} />
             </TouchableOpacity>
 
             <Text style={styles.monthLabel}>
@@ -182,20 +186,20 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
             </Text>
 
             <TouchableOpacity onPress={handleNextMonth} style={styles.navArrowBtn}>
-              <Ionicons name="chevron-forward" size={20} color={Colors.textPrimary} />
+              <Ionicons name="chevron-forward" size={16} color={colors.textPrimary} />
             </TouchableOpacity>
           </View>
 
-          {/* Weekday Labels */}
+          {/* Day of Week Headers */}
           <View style={styles.weekdayRow}>
-            {WEEKDAYS.map((wd) => (
-              <Text key={wd} style={styles.weekdayText}>
-                {wd}
+            {WEEKDAYS.map((w) => (
+              <Text key={w} style={styles.weekdayText}>
+                {w}
               </Text>
             ))}
           </View>
 
-          {/* Calendar Day Grid */}
+          {/* Days Grid */}
           <View style={styles.gridContainer}>
             {daysGrid.map((day, idx) => {
               if (day === null) {
@@ -249,180 +253,181 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  dialogCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 20,
-    width: '100%',
-    maxWidth: 360,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  headerTitleWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  presetRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginBottom: 14,
-  },
-  presetBtn: {
-    flex: 1,
-    paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    alignItems: 'center',
-  },
-  presetBtnActive: {
-    borderColor: Colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
-  },
-  presetBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  presetBtnTextActive: {
-    color: Colors.primary,
-  },
-  monthNavRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    marginBottom: 8,
-    borderTopWidth: 1,
-    borderTopColor: Colors.cardBorder,
-  },
-  monthLabel: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  navArrowBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: Colors.surface,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  weekdayRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 6,
-  },
-  weekdayText: {
-    width: 38,
-    textAlign: 'center',
-    fontSize: 11,
-    fontWeight: '700',
-    color: Colors.textMuted,
-  },
-  gridContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-start',
-    marginBottom: 14,
-  },
-  dayCell: {
-    width: '14.28%',
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: 10,
-    marginVertical: 2,
-    position: 'relative',
-  },
-  dayCellSelected: {
-    backgroundColor: Colors.primary,
-  },
-  dayCellToday: {
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  dayText: {
-    fontSize: 13,
-    fontWeight: '500',
-    color: Colors.textPrimary,
-  },
-  dayTextSelected: {
-    color: '#0B0F19',
-    fontWeight: '800',
-  },
-  dayTextToday: {
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-  todayDot: {
-    position: 'absolute',
-    bottom: 3,
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: Colors.primary,
-  },
-  footerRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: Colors.cardBorder,
-  },
-  footerDateLabel: {
-    fontSize: 10,
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  footerDateVal: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginTop: 1,
-  },
-  doneBtn: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: 18,
-    paddingVertical: 9,
-    borderRadius: 10,
-  },
-  doneBtnText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#0B0F19',
-  },
-});
+const getStyles = (colors: ThemePalette) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: colors.overlay,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 20,
+    },
+    dialogCard: {
+      backgroundColor: colors.card,
+      borderRadius: 20,
+      width: '100%',
+      maxWidth: 360,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      shadowColor: '#000',
+      shadowOffset: { width: 0, height: 10 },
+      shadowOpacity: 0.25,
+      shadowRadius: 20,
+      elevation: 8,
+    },
+    header: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 14,
+    },
+    headerTitleWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    headerTitle: {
+      fontSize: 17,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    closeBtn: {
+      padding: 4,
+    },
+    presetRow: {
+      flexDirection: 'row',
+      gap: 8,
+      marginBottom: 14,
+    },
+    presetBtn: {
+      flex: 1,
+      paddingVertical: 7,
+      borderRadius: 8,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      alignItems: 'center',
+    },
+    presetBtnActive: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primaryMuted,
+    },
+    presetBtnText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    presetBtnTextActive: {
+      color: colors.primary,
+    },
+    monthNavRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 8,
+      marginBottom: 8,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    monthLabel: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    navArrowBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    weekdayRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-around',
+      marginBottom: 6,
+    },
+    weekdayText: {
+      width: 38,
+      textAlign: 'center',
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.textMuted,
+    },
+    gridContainer: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      justifyContent: 'flex-start',
+      marginBottom: 14,
+    },
+    dayCell: {
+      width: '14.28%',
+      height: 38,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: 10,
+      marginVertical: 2,
+      position: 'relative',
+    },
+    dayCellSelected: {
+      backgroundColor: colors.primary,
+    },
+    dayCellToday: {
+      borderWidth: 1,
+      borderColor: colors.primary,
+    },
+    dayText: {
+      fontSize: 13,
+      fontWeight: '500',
+      color: colors.textPrimary,
+    },
+    dayTextSelected: {
+      color: colors.primaryText,
+      fontWeight: '800',
+    },
+    dayTextToday: {
+      color: colors.primary,
+      fontWeight: '700',
+    },
+    todayDot: {
+      position: 'absolute',
+      bottom: 3,
+      width: 4,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: colors.primary,
+    },
+    footerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingTop: 12,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+    },
+    footerDateLabel: {
+      fontSize: 10,
+      color: colors.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    footerDateVal: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginTop: 1,
+    },
+    doneBtn: {
+      backgroundColor: colors.primary,
+      paddingHorizontal: 18,
+      paddingVertical: 9,
+      borderRadius: 10,
+    },
+    doneBtnText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.primaryText,
+    },
+  });

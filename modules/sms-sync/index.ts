@@ -1,10 +1,12 @@
 import { requireNativeModule } from 'expo-modules-core';
 
 export interface RawInboxSms {
+  id?: number;
   sender: string;
   body: string;
   timestamp: number;
   sourcePackage?: string;
+  createdAt?: number;
 }
 
 let nativeModule: any = null;
@@ -24,23 +26,90 @@ export function isAvailable(): boolean {
   }
 }
 
-export async function readInboxMessages(days: number = 7): Promise<RawInboxSms[]> {
+export async function readInboxMessages(days: number = 14): Promise<RawInboxSms[]> {
   if (!nativeModule || !nativeModule.readInboxMessages) {
     return [];
   }
-  return await nativeModule.readInboxMessages(days);
+  try {
+    return await nativeModule.readInboxMessages(days);
+  } catch {
+    return [];
+  }
+}
+
+export async function getPendingRawMessages(): Promise<RawInboxSms[]> {
+  if (!nativeModule || !nativeModule.getPendingRawMessages) {
+    return [];
+  }
+  try {
+    return await nativeModule.getPendingRawMessages();
+  } catch {
+    return [];
+  }
+}
+
+export async function markRawMessagesProcessed(ids: number[]): Promise<boolean> {
+  if (!nativeModule || !nativeModule.markRawMessagesProcessed || ids.length === 0) {
+    return false;
+  }
+  try {
+    return await nativeModule.markRawMessagesProcessed(ids);
+  } catch {
+    return false;
+  }
 }
 
 export function isNotificationAccessGranted(): boolean {
   if (!nativeModule || !nativeModule.isNotificationAccessGranted) {
     return false;
   }
-  return !!nativeModule.isNotificationAccessGranted();
+  try {
+    return !!nativeModule.isNotificationAccessGranted();
+  } catch {
+    return false;
+  }
 }
 
 export function openNotificationSettings(): boolean {
   if (!nativeModule || !nativeModule.openNotificationSettings) {
     return false;
   }
-  return !!nativeModule.openNotificationSettings();
+  try {
+    return !!nativeModule.openNotificationSettings();
+  } catch {
+    return false;
+  }
+}
+
+export function getCrashLogs(): string {
+  if (!nativeModule || !nativeModule.getCrashLogs) {
+    return '';
+  }
+  try {
+    return nativeModule.getCrashLogs() || '';
+  } catch {
+    return '';
+  }
+}
+
+export function clearCrashLogs(): boolean {
+  if (!nativeModule || !nativeModule.clearCrashLogs) {
+    return false;
+  }
+  try {
+    return !!nativeModule.clearCrashLogs();
+  } catch {
+    return false;
+  }
+}
+
+export function logCrashSilently(source: String, message: String): boolean {
+  if (!nativeModule || !nativeModule.logCrash) {
+    return false;
+  }
+  try {
+    return !!nativeModule.logCrash(source, message);
+  } catch {
+    return false;
+  }
 }

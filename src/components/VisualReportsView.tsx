@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../theme/colors';
+import { ThemePalette } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { CashFlowStatement, CategoryBreakdownItem } from '../types/transaction';
 import { formatCurrency } from '../utils/formatters';
 import { useTransactions } from '../context/TransactionContext';
@@ -19,6 +20,8 @@ export const VisualReportsView: React.FC<VisualReportsViewProps> = ({
   expenseCategories,
   incomeCategories,
 }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
   const { currency } = useTransactions();
   const [activeTab, setActiveTab] = useState<'expenses' | 'income'>('expenses');
 
@@ -53,24 +56,24 @@ export const VisualReportsView: React.FC<VisualReportsViewProps> = ({
         <View style={styles.chartRow}>
           <View style={styles.labelCol}>
             <Text style={styles.flowBarLabel}>Inflows</Text>
-            <Text style={[styles.flowBarVal, { color: Colors.inflow }]}>
+            <Text style={[styles.flowBarVal, { color: colors.inflow }]}>
               {formatCurrency(statement.totalInflows, currency)}
             </Text>
           </View>
           <View style={styles.barTrack}>
-            <View style={[styles.barFill, { width: `${inflowWidthPct}%`, backgroundColor: Colors.inflow }]} />
+            <View style={[styles.barFill, { width: `${inflowWidthPct}%`, backgroundColor: colors.inflow }]} />
           </View>
         </View>
 
         <View style={styles.chartRow}>
           <View style={styles.labelCol}>
             <Text style={styles.flowBarLabel}>Outflows</Text>
-            <Text style={[styles.flowBarVal, { color: Colors.outflow }]}>
+            <Text style={[styles.flowBarVal, { color: colors.outflow }]}>
               {formatCurrency(statement.totalOutflows, currency)}
             </Text>
           </View>
           <View style={styles.barTrack}>
-            <View style={[styles.barFill, { width: `${outflowWidthPct}%`, backgroundColor: Colors.outflow }]} />
+            <View style={[styles.barFill, { width: `${outflowWidthPct}%`, backgroundColor: colors.outflow }]} />
           </View>
         </View>
 
@@ -79,7 +82,7 @@ export const VisualReportsView: React.FC<VisualReportsViewProps> = ({
             Net Margin:{' '}
             <Text
               style={{
-                color: statement.netCashFlow >= 0 ? Colors.inflow : Colors.outflow,
+                color: statement.netCashFlow >= 0 ? colors.inflow : colors.outflow,
                 fontWeight: '700',
               }}
             >
@@ -101,23 +104,23 @@ export const VisualReportsView: React.FC<VisualReportsViewProps> = ({
 
         {/* Stacked Ratio Bar */}
         <View style={styles.stackedBarContainer}>
-          <View style={[styles.stackedSegment, { flex: opPct || 1, backgroundColor: Colors.operating }]} />
-          <View style={[styles.stackedSegment, { flex: invPct || 1, backgroundColor: Colors.investing }]} />
-          <View style={[styles.stackedSegment, { flex: finPct || 1, backgroundColor: Colors.financing }]} />
+          <View style={[styles.stackedSegment, { flex: opPct || 1, backgroundColor: colors.operating }]} />
+          <View style={[styles.stackedSegment, { flex: invPct || 1, backgroundColor: colors.investing }]} />
+          <View style={[styles.stackedSegment, { flex: finPct || 1, backgroundColor: colors.financing }]} />
         </View>
 
         {/* Legend */}
         <View style={styles.legendRow}>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: Colors.operating }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.operating }]} />
             <Text style={styles.legendLabel}>Operating (Living): {opPct}%</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: Colors.investing }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.investing }]} />
             <Text style={styles.legendLabel}>Investing (Growth): {invPct}%</Text>
           </View>
           <View style={styles.legendItem}>
-            <View style={[styles.legendDot, { backgroundColor: Colors.financing }]} />
+            <View style={[styles.legendDot, { backgroundColor: colors.financing }]} />
             <Text style={styles.legendLabel}>Financing (Debt): {finPct}%</Text>
           </View>
         </View>
@@ -189,207 +192,205 @@ export const VisualReportsView: React.FC<VisualReportsViewProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  header: {
-    marginTop: 6,
-    marginBottom: 14,
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-  },
-  subtitle: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  card: {
-    backgroundColor: Colors.card,
-    borderRadius: 18,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 14,
-  },
-  cardTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  cardTag: {
-    fontSize: 11,
-    color: Colors.primary,
-    fontWeight: '600',
-  },
-  chartRow: {
-    marginBottom: 12,
-  },
-  labelCol: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-  },
-  flowBarLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  flowBarVal: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  barTrack: {
-    height: 10,
-    backgroundColor: Colors.surface,
-    borderRadius: 5,
-    overflow: 'hidden',
-  },
-  barFill: {
-    height: '100%',
-    borderRadius: 5,
-  },
-  savingsRateRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: Colors.cardBorder,
-    paddingTop: 10,
-    marginTop: 6,
-  },
-  savingsRateText: {
-    fontSize: 13,
-    color: Colors.textSecondary,
-  },
-  netCashLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  stackedBarContainer: {
-    flexDirection: 'row',
-    height: 14,
-    borderRadius: 7,
-    overflow: 'hidden',
-    backgroundColor: Colors.surface,
-    marginVertical: 10,
-  },
-  stackedSegment: {
-    height: '100%',
-  },
-  legendRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 8,
-  },
-  legendItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  legendDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    marginRight: 6,
-  },
-  legendLabel: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-  },
-  tabHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  tabToggle: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: 8,
-    padding: 2,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  toggleBtn: {
-    paddingVertical: 4,
-    paddingHorizontal: 10,
-    borderRadius: 6,
-  },
-  toggleBtnActive: {
-    backgroundColor: Colors.cardBorder,
-  },
-  toggleBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  toggleBtnTextActive: {
-    color: Colors.textPrimary,
-  },
-  emptyText: {
-    color: Colors.textMuted,
-    fontSize: 13,
-    fontStyle: 'italic',
-    paddingVertical: 10,
-    textAlign: 'center',
-  },
-  categoryRow: {
-    marginBottom: 14,
-  },
-  categoryInfo: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  catLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  catIconWrap: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  catName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-  },
-  catSubtext: {
-    fontSize: 10,
-    color: Colors.textMuted,
-    marginTop: 1,
-  },
-  catAmount: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  catProgressTrack: {
-    height: 6,
-    backgroundColor: Colors.surface,
-    borderRadius: 3,
-    overflow: 'hidden',
-  },
-  catProgressFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-});
+const getStyles = (colors: ThemePalette) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      paddingHorizontal: 16,
+    },
+    header: {
+      marginTop: 6,
+      marginBottom: 14,
+    },
+    title: {
+      fontSize: 20,
+      fontWeight: '800',
+      color: colors.textPrimary,
+    },
+    subtitle: {
+      fontSize: 13,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    card: {
+      backgroundColor: colors.card,
+      borderRadius: 18,
+      padding: 16,
+      marginBottom: 14,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    cardHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 14,
+    },
+    cardTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    cardTag: {
+      fontSize: 11,
+      color: colors.primary,
+      fontWeight: '600',
+    },
+    chartRow: {
+      marginBottom: 12,
+    },
+    labelCol: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      marginBottom: 4,
+    },
+    flowBarLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    flowBarVal: {
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    barTrack: {
+      height: 10,
+      backgroundColor: colors.surface,
+      borderRadius: 5,
+      overflow: 'hidden',
+    },
+    barFill: {
+      height: '100%',
+      borderRadius: 5,
+    },
+    savingsRateRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+      paddingTop: 10,
+      marginTop: 6,
+    },
+    savingsRateText: {
+      fontSize: 13,
+      color: colors.textSecondary,
+    },
+    netCashLabel: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    stackedBarContainer: {
+      flexDirection: 'row',
+      height: 16,
+      borderRadius: 8,
+      overflow: 'hidden',
+      marginBottom: 14,
+    },
+    stackedSegment: {
+      height: '100%',
+    },
+    legendRow: {
+      gap: 6,
+    },
+    legendItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    legendDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      marginRight: 6,
+    },
+    legendLabel: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      fontWeight: '500',
+    },
+    tabHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 16,
+    },
+    tabToggle: {
+      flexDirection: 'row',
+      backgroundColor: colors.surface,
+      borderRadius: 8,
+      padding: 2,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    toggleBtn: {
+      paddingVertical: 4,
+      paddingHorizontal: 10,
+      borderRadius: 6,
+    },
+    toggleBtnActive: {
+      backgroundColor: colors.primaryMuted,
+    },
+    toggleBtnText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    toggleBtnTextActive: {
+      color: colors.primary,
+      fontWeight: '700',
+    },
+    emptyText: {
+      color: colors.textMuted,
+      fontSize: 13,
+      fontStyle: 'italic',
+      paddingVertical: 10,
+      textAlign: 'center',
+    },
+    categoryRow: {
+      marginBottom: 14,
+    },
+    categoryInfo: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 6,
+    },
+    catLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    catIconWrap: {
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+    catName: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    catSubtext: {
+      fontSize: 10,
+      color: colors.textMuted,
+      marginTop: 1,
+    },
+    catAmount: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    catProgressTrack: {
+      height: 6,
+      backgroundColor: colors.surface,
+      borderRadius: 3,
+      overflow: 'hidden',
+    },
+    catProgressFill: {
+      height: '100%',
+      borderRadius: 3,
+    },
+  });

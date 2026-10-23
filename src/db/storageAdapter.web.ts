@@ -20,7 +20,15 @@ export class CrossPlatformStorageAdapter implements DatabaseAdapter {
     try {
       const rawCats = await AsyncStorage.getItem(ASYNC_STORAGE_KEYS.CATEGORIES);
       if (rawCats) {
-        this.categories = JSON.parse(rawCats);
+        const loaded: Category[] = JSON.parse(rawCats);
+        const existingIds = new Set(loaded.map((c) => c.id));
+        const merged = [...loaded];
+        for (const def of DEFAULT_CATEGORIES) {
+          if (!existingIds.has(def.id)) {
+            merged.push(def);
+          }
+        }
+        this.categories = merged;
       } else {
         this.categories = [...DEFAULT_CATEGORIES];
         await AsyncStorage.setItem(ASYNC_STORAGE_KEYS.CATEGORIES, JSON.stringify(this.categories));

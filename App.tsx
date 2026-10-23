@@ -11,7 +11,8 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from './src/theme/colors';
+import { ThemePalette } from './src/theme/colors';
+import { ThemeProvider, useTheme } from './src/context/ThemeContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { TransactionProvider, useTransactions } from './src/context/TransactionContext';
 import { AuthScreen } from './src/screens/AuthScreen';
@@ -22,6 +23,8 @@ import { VisualReportsView } from './src/components/VisualReportsView';
 import { TransactionList } from './src/components/TransactionList';
 import { TransactionModal } from './src/components/TransactionModal';
 import { CurrencyModal } from './src/components/CurrencyModal';
+import { SettingsModal } from './src/components/SettingsModal';
+import { MessageSourceModal } from './src/components/MessageSourceModal';
 import { SmsApprovalQueue } from './src/components/SmsApprovalQueue';
 import { PendingSmsTransaction } from './src/types/transaction';
 import { calculateCategoryBreakdown } from './src/utils/accounting';
@@ -30,6 +33,9 @@ import { formatCurrency, getActivityConfig } from './src/utils/formatters';
 type TabKey = 'dashboard' | 'cashflow' | 'reports' | 'transactions';
 
 function MainScreen() {
+  const { colors, isDark, toggleTheme } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
+
   const { currentUser, logout } = useAuth();
   const {
     period,
@@ -55,6 +61,8 @@ function MainScreen() {
   const [modalInitialType, setModalInitialType] = useState<'income' | 'expense'>('expense');
   const [editingPendingSms, setEditingPendingSms] = useState<PendingSmsTransaction | null>(null);
   const [currencyModalVisible, setCurrencyModalVisible] = useState<boolean>(false);
+  const [settingsModalVisible, setSettingsModalVisible] = useState<boolean>(false);
+  const [smartMergeModalVisible, setSmartMergeModalVisible] = useState<boolean>(false);
 
   // Compute category breakdowns for visual reports
   const expenseCategories = useMemo(
@@ -90,7 +98,7 @@ function MainScreen() {
   if (isLoading) {
     return (
       <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+        <ActivityIndicator size="large" color={colors.primary} />
         <Text style={styles.loadingText}>Initializing SQLite Cash Flow Engine...</Text>
       </View>
     );
@@ -98,19 +106,47 @@ function MainScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor={Colors.background} />
+      <StatusBar
+        barStyle={isDark ? 'light-content' : 'dark-content'}
+        backgroundColor={colors.background}
+      />
 
       {/* Top Application Bar with proper status bar clearance */}
       <View style={styles.topBar}>
         <View style={styles.brandRow}>
           <View style={styles.logoIcon}>
-            <Ionicons name="pie-chart" size={18} color="#0B0F19" />
+            <Ionicons name="pie-chart" size={18} color={colors.primaryText} />
           </View>
           <Text style={styles.brandTitle}>Home CashFlow</Text>
         </View>
+
+        {/* Quick Top Actions: Instant Theme Toggle & Settings */}
+        <View style={styles.topBarActions}>
+          <TouchableOpacity
+            style={styles.topActionBtn}
+            onPress={toggleTheme}
+            activeOpacity={0.7}
+            accessibilityLabel="Toggle Theme"
+          >
+            <Ionicons
+              name={isDark ? 'sunny' : 'moon'}
+              size={18}
+              color={isDark ? '#F59E0B' : colors.primary}
+            />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.topActionBtn}
+            onPress={() => setSettingsModalVisible(true)}
+            activeOpacity={0.7}
+            accessibilityLabel="Settings"
+          >
+            <Ionicons name="settings-outline" size={18} color={colors.textSecondary} />
+          </TouchableOpacity>
+        </View>
       </View>
 
-      {/* Utility Bar Below: Currency Selection & Profile Logout (Safely away from battery and operator signals) */}
+      {/* Utility Bar Below: Currency Selection & Profile Logout */}
       <View style={styles.utilityBar}>
         <View style={styles.userBadge}>
           <Text style={styles.userAvatar}>{currentUser?.avatar || '👤'}</Text>
@@ -130,7 +166,7 @@ function MainScreen() {
               <Text style={styles.currSymbolText}>{currency.symbol}</Text>
             </View>
             <Text style={styles.currCodeText}>{currency.code}</Text>
-            <Ionicons name="chevron-down" size={12} color={Colors.textSecondary} style={{ marginLeft: 3 }} />
+            <Ionicons name="chevron-down" size={12} color={colors.textSecondary} style={{ marginLeft: 3 }} />
           </TouchableOpacity>
 
           {/* User Profile / Logout / Switch Account Button */}
@@ -139,7 +175,7 @@ function MainScreen() {
             onPress={logout}
             activeOpacity={0.7}
           >
-            <Ionicons name="log-out-outline" size={13} color="#F43F5E" style={{ marginRight: 3 }} />
+            <Ionicons name="log-out-outline" size={13} color={colors.outflow} style={{ marginRight: 3 }} />
             <Text style={styles.logoutBtnText}>Switch</Text>
           </TouchableOpacity>
         </View>
@@ -169,45 +205,45 @@ function MainScreen() {
               <Text style={styles.sectionHeaderTitle}>Cash Flow By Activity</Text>
               <View style={styles.activityGrid}>
                 {/* Operating */}
-                <View style={[styles.activityTile, { borderLeftColor: Colors.operating }]}>
+                <View style={[styles.activityTile, { borderLeftColor: colors.operating }]}>
                   <Text style={styles.tileLabel}>Operating (CFO)</Text>
                   <Text
                     style={[
                       styles.tileAmount,
-                      { color: metrics.cashFlow.netOperating >= 0 ? Colors.inflow : Colors.outflow },
+                      { color: metrics.cashFlow.netOperating >= 0 ? colors.inflow : colors.outflow },
                     ]}
                   >
                     {formatCurrency(metrics.cashFlow.netOperating, currency, true)}
                   </Text>
-                  <Text style={styles.tileDesc}>Living Expenses</Text>
+                  <Text style={styles.tileDesc}>Living Expenses & Core Income</Text>
                 </View>
 
                 {/* Investing */}
-                <View style={[styles.activityTile, { borderLeftColor: Colors.investing }]}>
+                <View style={[styles.activityTile, { borderLeftColor: colors.investing }]}>
                   <Text style={styles.tileLabel}>Investing (CFI)</Text>
                   <Text
                     style={[
                       styles.tileAmount,
-                      { color: metrics.cashFlow.netInvesting >= 0 ? Colors.inflow : Colors.outflow },
+                      { color: metrics.cashFlow.netInvesting >= 0 ? colors.inflow : colors.outflow },
                     ]}
                   >
                     {formatCurrency(metrics.cashFlow.netInvesting, currency, true)}
                   </Text>
-                  <Text style={styles.tileDesc}>Home & Savings</Text>
+                  <Text style={styles.tileDesc}>Wealth Assets & Investments</Text>
                 </View>
 
                 {/* Financing */}
-                <View style={[styles.activityTile, { borderLeftColor: Colors.financing }]}>
+                <View style={[styles.activityTile, { borderLeftColor: colors.financing }]}>
                   <Text style={styles.tileLabel}>Financing (CFF)</Text>
                   <Text
                     style={[
                       styles.tileAmount,
-                      { color: metrics.cashFlow.netFinancing >= 0 ? Colors.inflow : Colors.outflow },
+                      { color: metrics.cashFlow.netFinancing >= 0 ? colors.inflow : colors.outflow },
                     ]}
                   >
                     {formatCurrency(metrics.cashFlow.netFinancing, currency, true)}
                   </Text>
-                  <Text style={styles.tileDesc}>Mortgage & Loans</Text>
+                  <Text style={styles.tileDesc}>Liabilities & Debt Paydowns</Text>
                 </View>
               </View>
             </View>
@@ -228,11 +264,11 @@ function MainScreen() {
                 return (
                   <View key={tx.id} style={styles.miniTxRow}>
                     <View style={styles.miniTxLeft}>
-                      <View style={[styles.miniIconBox, { backgroundColor: cat ? `${cat.color}25` : Colors.surface }]}>
+                      <View style={[styles.miniIconBox, { backgroundColor: cat ? `${cat.color}25` : colors.surface }]}>
                         <Ionicons
                           name={(cat?.icon as any) || 'pricetag-outline'}
                           size={15}
-                          color={cat?.color || Colors.textSecondary}
+                          color={cat?.color || colors.textSecondary}
                         />
                       </View>
                       <View>
@@ -244,7 +280,7 @@ function MainScreen() {
                       <Text
                         style={[
                           styles.miniAmount,
-                          { color: isIncome ? Colors.inflow : Colors.textPrimary },
+                          { color: isIncome ? colors.inflow : colors.textPrimary },
                         ]}
                       >
                         {formatCurrency(tx.amount, currency, true)}
@@ -300,7 +336,7 @@ function MainScreen() {
           <Ionicons
             name={activeTab === 'dashboard' ? 'home' : 'home-outline'}
             size={22}
-            color={activeTab === 'dashboard' ? Colors.primary : Colors.textSecondary}
+            color={activeTab === 'dashboard' ? colors.primary : colors.textSecondary}
           />
           <Text style={[styles.navLabel, activeTab === 'dashboard' && styles.navLabelActive]}>
             Dashboard
@@ -314,7 +350,7 @@ function MainScreen() {
           <Ionicons
             name={activeTab === 'cashflow' ? 'document-text' : 'document-text-outline'}
             size={22}
-            color={activeTab === 'cashflow' ? Colors.primary : Colors.textSecondary}
+            color={activeTab === 'cashflow' ? colors.primary : colors.textSecondary}
           />
           <Text style={[styles.navLabel, activeTab === 'cashflow' && styles.navLabelActive]}>
             Statement
@@ -327,7 +363,7 @@ function MainScreen() {
           onPress={() => openAddModal('expense')}
           activeOpacity={0.85}
         >
-          <Ionicons name="add" size={26} color="#0B0F19" />
+          <Ionicons name="add" size={26} color={colors.primaryText} />
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -337,7 +373,7 @@ function MainScreen() {
           <Ionicons
             name={activeTab === 'reports' ? 'bar-chart' : 'bar-chart-outline'}
             size={22}
-            color={activeTab === 'reports' ? Colors.primary : Colors.textSecondary}
+            color={activeTab === 'reports' ? colors.primary : colors.textSecondary}
           />
           <Text style={[styles.navLabel, activeTab === 'reports' && styles.navLabelActive]}>
             Reports
@@ -351,7 +387,7 @@ function MainScreen() {
           <Ionicons
             name={activeTab === 'transactions' ? 'list' : 'list-outline'}
             size={22}
-            color={activeTab === 'transactions' ? Colors.primary : Colors.textSecondary}
+            color={activeTab === 'transactions' ? colors.primary : colors.textSecondary}
           />
           <Text style={[styles.navLabel, activeTab === 'transactions' && styles.navLabelActive]}>
             Ledger
@@ -386,18 +422,33 @@ function MainScreen() {
         onSelect={setCurrency}
         onClose={() => setCurrencyModalVisible(false)}
       />
+
+      {/* Settings & Theme Modal */}
+      <SettingsModal
+        visible={settingsModalVisible}
+        onClose={() => setSettingsModalVisible(false)}
+        onOpenCurrencyModal={() => setCurrencyModalVisible(true)}
+        onOpenSmartMergeModal={() => setSmartMergeModalVisible(true)}
+      />
+
+      {/* Smart Merge Engine Modal */}
+      <MessageSourceModal
+        visible={smartMergeModalVisible}
+        onClose={() => setSmartMergeModalVisible(false)}
+      />
     </SafeAreaView>
   );
 }
 
 function RootNavigator() {
   const { isAuthenticated, isLoadingAuth } = useAuth();
+  const { colors, isDark } = useTheme();
 
   if (isLoadingAuth) {
     return (
-      <View style={styles.centerContainer}>
-        <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={styles.loadingText}>Loading Household Session...</Text>
+      <View style={[stylesStatic.centerContainer, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={[stylesStatic.loadingText, { color: colors.textSecondary }]}>Loading Household Session...</Text>
       </View>
     );
   }
@@ -411,294 +462,309 @@ function RootNavigator() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <TransactionProvider>
-        <RootNavigator />
-      </TransactionProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <TransactionProvider>
+          <RootNavigator />
+        </TransactionProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }
 
-const styles = StyleSheet.create({
-  safeArea: {
-    flex: 1,
-    backgroundColor: Colors.background,
-  },
+const stylesStatic = StyleSheet.create({
   centerContainer: {
     flex: 1,
-    backgroundColor: Colors.background,
     alignItems: 'center',
     justifyContent: 'center',
   },
   loadingText: {
-    color: Colors.textSecondary,
     fontSize: 14,
     marginTop: 12,
   },
-  topBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) + 8 : 12,
-    paddingBottom: 4,
-  },
-  brandRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  logoIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  brandTitle: {
-    fontSize: 17,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-    letterSpacing: -0.3,
-  },
-  utilityBar: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255, 255, 255, 0.05)',
-  },
-  userBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    maxWidth: '55%',
-  },
-  userAvatar: {
-    fontSize: 13,
-    marginRight: 6,
-  },
-  userName: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  utilityActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  currencyBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  currSymbolCircle: {
-    width: 18,
-    height: 18,
-    borderRadius: 9,
-    backgroundColor: Colors.primaryMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 5,
-  },
-  currSymbolText: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: Colors.primary,
-  },
-  currCodeText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  logoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(244, 63, 94, 0.1)',
-    paddingHorizontal: 9,
-    paddingVertical: 5,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(244, 63, 94, 0.25)',
-  },
-  logoutBtnText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#F43F5E',
-  },
-  resetBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  resetBtnText: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    fontWeight: '500',
-  },
-  contentArea: {
-    flex: 1,
-  },
-  summarySection: {
-    marginHorizontal: 16,
-    marginTop: 18,
-  },
-  sectionHeaderTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginBottom: 10,
-  },
-  activityGrid: {
-    flexDirection: 'row',
-    gap: 8,
-  },
-  activityTile: {
-    flex: 1,
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 10,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    borderLeftWidth: 3.5,
-  },
-  tileLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-  },
-  tileAmount: {
-    fontSize: 13,
-    fontWeight: '700',
-    marginTop: 4,
-  },
-  tileDesc: {
-    fontSize: 9,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  recentSection: {
-    marginHorizontal: 16,
-    marginTop: 20,
-  },
-  recentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  viewAllText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.primary,
-  },
-  miniTxRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  miniTxLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  miniIconBox: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  miniCatName: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-  },
-  miniDate: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    marginTop: 1,
-  },
-  miniTxRight: {
-    alignItems: 'flex-end',
-  },
-  miniAmount: {
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  miniActBadge: {
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 4,
-    marginTop: 2,
-  },
-  miniActText: {
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderTopWidth: 1,
-    borderColor: Colors.cardBorder,
-    paddingVertical: 8,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    justifyContent: 'space-around',
-  },
-  navTab: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-  },
-  navLabel: {
-    fontSize: 10,
-    color: Colors.textSecondary,
-    marginTop: 3,
-    fontWeight: '500',
-  },
-  navLabelActive: {
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-  centerFab: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 12,
-    shadowColor: Colors.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    elevation: 5,
-  },
 });
+
+const getStyles = (colors: ThemePalette) =>
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: colors.background,
+    },
+    centerContainer: {
+      flex: 1,
+      backgroundColor: colors.background,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    loadingText: {
+      color: colors.textSecondary,
+      fontSize: 14,
+      marginTop: 12,
+    },
+    topBar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) + 8 : 12,
+      paddingBottom: 6,
+    },
+    brandRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    logoIcon: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+    brandTitle: {
+      fontSize: 17,
+      fontWeight: '800',
+      color: colors.textPrimary,
+      letterSpacing: -0.3,
+    },
+    topBarActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    topActionBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    utilityBar: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.cardBorder,
+    },
+    userBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      maxWidth: '55%',
+    },
+    userAvatar: {
+      fontSize: 13,
+      marginRight: 6,
+    },
+    userName: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    utilityActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+    },
+    currencyBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    currSymbolCircle: {
+      width: 18,
+      height: 18,
+      borderRadius: 9,
+      backgroundColor: colors.primaryMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 5,
+    },
+    currSymbolText: {
+      fontSize: 11,
+      fontWeight: '800',
+      color: colors.primary,
+    },
+    currCodeText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    logoutBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: `${colors.outflow}15`,
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: `${colors.outflow}35`,
+    },
+    logoutBtnText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.outflow,
+    },
+    contentArea: {
+      flex: 1,
+    },
+    summarySection: {
+      marginHorizontal: 16,
+      marginTop: 18,
+    },
+    sectionHeaderTitle: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginBottom: 10,
+    },
+    activityGrid: {
+      flexDirection: 'row',
+      gap: 8,
+    },
+    activityTile: {
+      flex: 1,
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      padding: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderLeftWidth: 3.5,
+    },
+    tileLabel: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: colors.textMuted,
+      textTransform: 'uppercase',
+    },
+    tileAmount: {
+      fontSize: 13,
+      fontWeight: '700',
+      marginTop: 4,
+    },
+    tileDesc: {
+      fontSize: 9,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    recentSection: {
+      marginHorizontal: 16,
+      marginTop: 20,
+    },
+    recentHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10,
+    },
+    viewAllText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    miniTxRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    miniTxLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    miniIconBox: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+    miniCatName: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    miniDate: {
+      fontSize: 11,
+      color: colors.textMuted,
+      marginTop: 1,
+    },
+    miniTxRight: {
+      alignItems: 'flex-end',
+    },
+    miniAmount: {
+      fontSize: 13,
+      fontWeight: '700',
+    },
+    miniActBadge: {
+      paddingHorizontal: 4,
+      paddingVertical: 1,
+      borderRadius: 4,
+      marginTop: 2,
+    },
+    miniActText: {
+      fontSize: 9,
+      fontWeight: '800',
+    },
+    bottomNav: {
+      flexDirection: 'row',
+      backgroundColor: colors.surface,
+      borderTopWidth: 1,
+      borderColor: colors.cardBorder,
+      paddingVertical: 8,
+      paddingHorizontal: 8,
+      alignItems: 'center',
+      justifyContent: 'space-around',
+    },
+    navTab: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      flex: 1,
+    },
+    navLabel: {
+      fontSize: 10,
+      color: colors.textSecondary,
+      marginTop: 3,
+      fontWeight: '500',
+    },
+    navLabelActive: {
+      color: colors.primary,
+      fontWeight: '700',
+    },
+    centerFab: {
+      width: 46,
+      height: 46,
+      borderRadius: 23,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 12,
+      shadowColor: colors.primary,
+      shadowOffset: { width: 0, height: 4 },
+      shadowOpacity: 0.4,
+      shadowRadius: 8,
+      elevation: 5,
+    },
+  });

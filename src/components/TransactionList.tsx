@@ -10,10 +10,12 @@ import {
   Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../theme/colors';
+import { ThemePalette } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { Transaction, Category, Currency } from '../types/transaction';
 import { formatCurrency, formatDatePretty, getActivityConfig } from '../utils/formatters';
 import { useTransactions } from '../context/TransactionContext';
+import { TransactionDetailModal } from './TransactionDetailModal';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -25,7 +27,7 @@ interface TransactionListProps {
   periodLabel: string;
 }
 
-// Memoized single row component to prevent re-rendering entire list when one item changes
+// Memoized single row component
 const TransactionRow = React.memo<{
   item: Transaction;
   cat?: Category;
@@ -35,6 +37,7 @@ const TransactionRow = React.memo<{
   onToggleSelect: (id: string) => void;
   onStartSelectMode: (id: string) => void;
   onDeleteSingle: (item: Transaction) => void;
+  onPressItem: (item: Transaction) => void;
 }>(({
   item,
   cat,
@@ -44,7 +47,10 @@ const TransactionRow = React.memo<{
   onToggleSelect,
   onStartSelectMode,
   onDeleteSingle,
+  onPressItem,
 }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
   const actConfig = getActivityConfig(item.activity);
   const isIncome = item.type === 'income';
 
@@ -58,6 +64,8 @@ const TransactionRow = React.memo<{
       onPress={() => {
         if (isSelectMode) {
           onToggleSelect(item.id);
+        } else {
+          onPressItem(item);
         }
       }}
       onLongPress={() => {
@@ -75,7 +83,7 @@ const TransactionRow = React.memo<{
             <Ionicons
               name={isSelected ? 'checkbox' : 'square-outline'}
               size={22}
-              color={isSelected ? Colors.primary : Colors.textMuted}
+              color={isSelected ? colors.primary : colors.textMuted}
             />
           </TouchableOpacity>
         )}
@@ -83,19 +91,22 @@ const TransactionRow = React.memo<{
         <View
           style={[
             styles.iconBox,
-            { backgroundColor: cat ? `${cat.color}20` : Colors.surface },
+            { backgroundColor: cat ? `${cat.color}20` : colors.surface },
           ]}
         >
           <Ionicons
             name={(cat?.icon as any) || 'pricetag-outline'}
             size={18}
-            color={cat?.color || Colors.textSecondary}
+            color={cat?.color || colors.textSecondary}
           />
         </View>
 
         <View style={styles.metaCol}>
           <View style={styles.titleRow}>
-            <Text style={styles.catName}>{cat?.name || 'Uncategorized'}</Text>
+            <View style={styles.catDropdownPill}>
+              <Text style={styles.catName}>{cat?.name || 'Uncategorized'}</Text>
+              <Ionicons name="chevron-down" size={10} color={colors.primary} style={{ marginLeft: 3 }} />
+            </View>
             <View style={[styles.actBadge, { backgroundColor: actConfig.badgeBg }]}>
               <Text style={[styles.actBadgeText, { color: actConfig.color }]}>
                 {actConfig.code}
@@ -109,14 +120,19 @@ const TransactionRow = React.memo<{
             <Text style={styles.dateText}>{formatDatePretty(item.date)}</Text>
             <Text style={styles.accountDot}>•</Text>
             <Text style={styles.accountText} numberOfLines={1}>{item.sourceAccount || 'Cash'}</Text>
-            {item.detectedUpiApp ? (
-              <View style={[styles.autoBadge, { backgroundColor: '#F59E0B20', borderColor: '#F59E0B40' }]}>
-                <Ionicons name="flash" size={8} color="#F59E0B" style={{ marginRight: 2 }} />
-                <Text style={[styles.autoBadgeText, { color: '#F59E0B' }]}>{item.detectedUpiApp}</Text>
+            {item.rawSms ? (
+              <View style={[styles.autoBadge, { backgroundColor: `${colors.primary}20`, borderColor: `${colors.primary}40` }]}>
+                <Ionicons name="document-text" size={8} color={colors.primary} style={{ marginRight: 2 }} />
+                <Text style={[styles.autoBadgeText, { color: colors.primary }]}>SMS AUDIT</Text>
+              </View>
+            ) : item.detectedUpiApp ? (
+              <View style={[styles.autoBadge, { backgroundColor: `${colors.financing}20`, borderColor: `${colors.financing}40` }]}>
+                <Ionicons name="flash" size={8} color={colors.financing} style={{ marginRight: 2 }} />
+                <Text style={[styles.autoBadgeText, { color: colors.financing }]}>{item.detectedUpiApp}</Text>
               </View>
             ) : item.entryMode === 'AUTOMATED' ? (
               <View style={styles.autoBadge}>
-                <Ionicons name="flash" size={8} color={Colors.primary} style={{ marginRight: 2 }} />
+                <Ionicons name="flash" size={8} color={colors.primary} style={{ marginRight: 2 }} />
                 <Text style={styles.autoBadgeText}>AUTO</Text>
               </View>
             ) : null}
@@ -128,7 +144,7 @@ const TransactionRow = React.memo<{
         <Text
           style={[
             styles.amountText,
-            { color: isIncome ? Colors.inflow : Colors.textPrimary },
+            { color: isIncome ? colors.inflow : colors.textPrimary },
           ]}
         >
           {formatCurrency(item.amount, currency, true)}
@@ -140,7 +156,7 @@ const TransactionRow = React.memo<{
             onPress={() => onDeleteSingle(item)}
             activeOpacity={0.7}
           >
-            <Ionicons name="trash-outline" size={15} color={Colors.textMuted} />
+            <Ionicons name="trash-outline" size={15} color={colors.textMuted} />
           </TouchableOpacity>
         )}
       </View>
@@ -157,10 +173,17 @@ export const TransactionList: React.FC<TransactionListProps> = ({
   onAddNew,
   periodLabel,
 }) => {
-  const { currency } = useTransactions();
+  const { colors } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
+
+  const { currency, categories, updateTransaction } = useTransactions();
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [isSelectMode, setIsSelectMode] = useState<boolean>(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  // Detail Sheet state
+  const [selectedTxForDetail, setSelectedTxForDetail] = useState<Transaction | null>(null);
+  const [detailModalVisible, setDetailModalVisible] = useState<boolean>(false);
 
   // Memoized search filtering
   const filtered = useMemo(() => {
@@ -172,12 +195,14 @@ export const TransactionList: React.FC<TransactionListProps> = ({
       const notes = (tx.notes || '').toLowerCase();
       const source = (tx.sourceAccount || '').toLowerCase();
       const mode = (tx.entryMode || '').toLowerCase();
+      const raw = (tx.rawSms || '').toLowerCase();
       return (
         catName.includes(query) ||
         notes.includes(query) ||
         tx.date.includes(query) ||
         source.includes(query) ||
-        mode.includes(query)
+        mode.includes(query) ||
+        raw.includes(query)
       );
     });
   }, [transactions, categoriesMap, searchTerm]);
@@ -212,26 +237,52 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     setSelectedIds(new Set());
   }, []);
 
-  const confirmDeleteSingle = useCallback((tx: Transaction) => {
-    const cat = categoriesMap.get(tx.categoryId);
-    const name = cat?.name || 'this transaction';
-    const msg = `Are you sure you want to delete ${name} (${formatCurrency(tx.amount, currency)})?`;
+  const handleOpenDetail = useCallback((item: Transaction) => {
+    setSelectedTxForDetail(item);
+    setDetailModalVisible(true);
+  }, []);
 
-    if (Platform.OS === 'web') {
-      if (confirm(msg)) {
-        onDeleteTransaction(tx.id);
+  const handleUpdateCategory = useCallback(
+    async (txId: string, newCategoryId: string) => {
+      const tx = transactions.find((t) => t.id === txId);
+      if (!tx) return;
+
+      const newCat = categoriesMap.get(newCategoryId);
+      const updatedTx: Transaction = {
+        ...tx,
+        categoryId: newCategoryId,
+        activity: newCat?.activity || tx.activity,
+      };
+
+      await updateTransaction(updatedTx);
+      setSelectedTxForDetail(updatedTx);
+    },
+    [transactions, categoriesMap, updateTransaction]
+  );
+
+  const confirmDeleteSingle = useCallback(
+    (tx: Transaction) => {
+      const cat = categoriesMap.get(tx.categoryId);
+      const name = cat?.name || 'this transaction';
+      const msg = `Are you sure you want to delete ${name} (${formatCurrency(tx.amount, currency)})?`;
+
+      if (Platform.OS === 'web') {
+        if (confirm(msg)) {
+          onDeleteTransaction(tx.id);
+        }
+      } else {
+        Alert.alert('Delete Transaction', msg, [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => onDeleteTransaction(tx.id),
+          },
+        ]);
       }
-    } else {
-      Alert.alert('Delete Transaction', msg, [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => onDeleteTransaction(tx.id),
-        },
-      ]);
-    }
-  }, [categoriesMap, currency, onDeleteTransaction]);
+    },
+    [categoriesMap, currency, onDeleteTransaction]
+  );
 
   const confirmDeleteSelected = useCallback(() => {
     if (selectedIds.size === 0) return;
@@ -294,52 +345,65 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     }
   }, [transactions, onClearAll, onDeleteTransactions, exitSelectMode]);
 
-  const renderItem = useCallback(({ item }: { item: Transaction }) => {
-    const cat = categoriesMap.get(item.categoryId);
-    const isSelected = selectedIds.has(item.id);
+  const renderItem = useCallback(
+    ({ item }: { item: Transaction }) => {
+      const cat = categoriesMap.get(item.categoryId);
+      const isSelected = selectedIds.has(item.id);
 
-    return (
-      <TransactionRow
-        item={item}
-        cat={cat}
-        currency={currency}
-        isSelected={isSelected}
-        isSelectMode={isSelectMode}
-        onToggleSelect={toggleSelectTx}
-        onStartSelectMode={startSelectMode}
-        onDeleteSingle={confirmDeleteSingle}
-      />
-    );
-  }, [categoriesMap, selectedIds, currency, isSelectMode, toggleSelectTx, startSelectMode, confirmDeleteSingle]);
+      return (
+        <TransactionRow
+          item={item}
+          cat={cat}
+          currency={currency}
+          isSelected={isSelected}
+          isSelectMode={isSelectMode}
+          onToggleSelect={toggleSelectTx}
+          onStartSelectMode={startSelectMode}
+          onDeleteSingle={confirmDeleteSingle}
+          onPressItem={handleOpenDetail}
+        />
+      );
+    },
+    [
+      categoriesMap,
+      selectedIds,
+      currency,
+      isSelectMode,
+      toggleSelectTx,
+      startSelectMode,
+      confirmDeleteSingle,
+      handleOpenDetail,
+    ]
+  );
 
   return (
     <View style={styles.container}>
       {/* Search & Actions Header */}
       <View style={styles.searchRow}>
         <View style={styles.searchBar}>
-          <Ionicons name="search-outline" size={16} color={Colors.textSecondary} style={{ marginRight: 8 }} />
+          <Ionicons name="search-outline" size={16} color={colors.textSecondary} style={{ marginRight: 8 }} />
           <TextInput
             style={styles.searchInput}
-            placeholder="Search notes, category, or date..."
-            placeholderTextColor={Colors.textMuted}
+            placeholder="Search notes, category, date, or SMS..."
+            placeholderTextColor={colors.placeholder}
             value={searchTerm}
             onChangeText={setSearchTerm}
           />
           {searchTerm.length > 0 && (
             <TouchableOpacity onPress={() => setSearchTerm('')}>
-              <Ionicons name="close-circle" size={16} color={Colors.textMuted} />
+              <Ionicons name="close-circle" size={16} color={colors.textMuted} />
             </TouchableOpacity>
           )}
         </View>
         <TouchableOpacity style={styles.addBtn} onPress={onAddNew}>
-          <Ionicons name="add" size={20} color="#0B0F19" />
+          <Ionicons name="add" size={20} color={colors.primaryText} />
         </TouchableOpacity>
       </View>
 
       {/* Period Header & Batch Actions Bar */}
       <View style={styles.toolbarRow}>
         <Text style={styles.periodHeader}>
-          {filtered.length} entries for <Text style={{ color: Colors.primary }}>{periodLabel}</Text>
+          {filtered.length} entries for <Text style={{ color: colors.primary }}>{periodLabel}</Text>
         </Text>
 
         <View style={styles.toolbarActions}>
@@ -371,7 +435,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 onPress={exitSelectMode}
                 activeOpacity={0.7}
               >
-                <Text style={styles.toolBtnTextCancel}>Done</Text>
+                <Text style={styles.toolBtnTextCancel}>Cancel</Text>
               </TouchableOpacity>
             </>
           ) : (
@@ -382,7 +446,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                   onPress={() => setIsSelectMode(true)}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="checkbox-outline" size={13} color={Colors.textSecondary} style={{ marginRight: 4 }} />
+                  <Ionicons name="checkmark-circle-outline" size={13} color={colors.textSecondary} style={{ marginRight: 3 }} />
                   <Text style={styles.toolBtnText}>Select</Text>
                 </TouchableOpacity>
               )}
@@ -393,7 +457,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                   onPress={confirmClearAll}
                   activeOpacity={0.7}
                 >
-                  <Ionicons name="trash-outline" size={13} color="#F43F5E" style={{ marginRight: 3 }} />
+                  <Ionicons name="trash-outline" size={13} color={colors.outflow} style={{ marginRight: 3 }} />
                   <Text style={styles.toolBtnTextClear}>Clear All</Text>
                 </TouchableOpacity>
               )}
@@ -402,271 +466,306 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         </View>
       </View>
 
-      {/* Transactions List */}
-      {filtered.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="receipt-outline" size={44} color={Colors.textMuted} />
-          <Text style={styles.emptyTitle}>No transactions found</Text>
-          <Text style={styles.emptySubtext}>
-            {searchTerm ? 'Try adjusting your search query' : 'Your ledger is completely clean. Record an entry to begin.'}
-          </Text>
-          <TouchableOpacity style={styles.emptyAddBtn} onPress={onAddNew}>
-            <Text style={styles.emptyAddBtnText}>Add First Transaction</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={filtered}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 60 }}
-          showsVerticalScrollIndicator={false}
-          initialNumToRender={10}
-          maxToRenderPerBatch={10}
-          windowSize={5}
-          removeClippedSubviews={Platform.OS !== 'web'}
-        />
-      )}
+      {/* Transaction List */}
+      <FlatList
+        data={filtered}
+        keyExtractor={(item) => item.id}
+        renderItem={renderItem}
+        contentContainerStyle={[
+          styles.listContent,
+          filtered.length === 0 && styles.listContentEmpty,
+        ]}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <View style={styles.emptyIconCircle}>
+              <Ionicons name="receipt-outline" size={32} color={colors.textMuted} />
+            </View>
+            <Text style={styles.emptyTitle}>No Transactions Found</Text>
+            <Text style={styles.emptySubtitle}>
+              {searchTerm
+                ? 'No matches for your search query.'
+                : `No expenses or income recorded for ${periodLabel}. Tap + to add an entry or sync bank SMS.`}
+            </Text>
+            <TouchableOpacity style={styles.emptyAddBtn} onPress={onAddNew}>
+              <Ionicons name="add" size={16} color={colors.primaryText} style={{ marginRight: 4 }} />
+              <Text style={styles.emptyAddBtnText}>Add Transaction</Text>
+            </TouchableOpacity>
+          </View>
+        }
+      />
+
+      {/* Transaction Detail & Raw SMS Audit Sheet */}
+      <TransactionDetailModal
+        visible={detailModalVisible}
+        transaction={selectedTxForDetail}
+        categories={categories}
+        categoriesMap={categoriesMap}
+        currency={currency}
+        onClose={() => setDetailModalVisible(false)}
+        onUpdateCategory={handleUpdateCategory}
+        onDelete={confirmDeleteSingle}
+      />
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  searchRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 4,
-    marginBottom: 8,
-  },
-  searchBar: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.card,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  searchInput: {
-    flex: 1,
-    color: Colors.textPrimary,
-    fontSize: 13,
-    paddingVertical: 10,
-  },
-  addBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  toolbarRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-    minHeight: 28,
-  },
-  periodHeader: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-  },
-  toolbarActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  toolBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  toolBtnText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  toolBtnMuted: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: 'rgba(244, 63, 94, 0.1)',
-    borderWidth: 1,
-    borderColor: 'rgba(244, 63, 94, 0.25)',
-  },
-  toolBtnTextClear: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: '#F43F5E',
-  },
-  toolBtnDanger: {
-    backgroundColor: '#E11D48',
-    borderColor: '#E11D48',
-  },
-  toolBtnTextDanger: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#FFFFFF',
-  },
-  toolBtnCancel: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    backgroundColor: Colors.cardBorder,
-  },
-  toolBtnTextCancel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.textPrimary,
-  },
-  txRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    backgroundColor: Colors.card,
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  txRowSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.08)',
-  },
-  leftCol: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  checkCol: {
-    marginRight: 8,
-    padding: 2,
-  },
-  iconBox: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  metaCol: {
-    flex: 1,
-  },
-  titleRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  catName: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  actBadge: {
-    paddingHorizontal: 5,
-    paddingVertical: 2,
-    borderRadius: 4,
-  },
-  actBadgeText: {
-    fontSize: 9,
-    fontWeight: '800',
-  },
-  notesText: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  subMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 2,
-    flexWrap: 'wrap',
-  },
-  dateText: {
-    fontSize: 11,
-    color: Colors.textMuted,
-  },
-  accountDot: {
-    fontSize: 10,
-    color: Colors.textMuted,
-    marginHorizontal: 4,
-  },
-  accountText: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    maxWidth: 120,
-  },
-  autoBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 4,
-    marginLeft: 6,
-  },
-  autoBadgeText: {
-    fontSize: 8,
-    fontWeight: '800',
-    color: Colors.primary,
-  },
-  rightCol: {
-    alignItems: 'flex-end',
-    marginLeft: 10,
-  },
-  amountText: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  deleteBtn: {
-    marginTop: 6,
-    padding: 4,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-    marginTop: 12,
-  },
-  emptySubtext: {
-    fontSize: 13,
-    color: Colors.textMuted,
-    marginTop: 4,
-    textAlign: 'center',
-    paddingHorizontal: 30,
-  },
-  emptyAddBtn: {
-    marginTop: 18,
-    backgroundColor: Colors.primaryMuted,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 10,
-  },
-  emptyAddBtnText: {
-    color: Colors.primary,
-    fontWeight: '600',
-    fontSize: 13,
-  },
-});
+const getStyles = (colors: ThemePalette) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      paddingHorizontal: 16,
+    },
+    searchRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginTop: 4,
+      marginBottom: 8,
+    },
+    searchBar: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.card,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    searchInput: {
+      flex: 1,
+      color: colors.textPrimary,
+      fontSize: 13,
+      paddingVertical: 10,
+    },
+    addBtn: {
+      width: 44,
+      height: 44,
+      borderRadius: 12,
+      backgroundColor: colors.primary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    toolbarRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 10,
+      minHeight: 28,
+    },
+    periodHeader: {
+      fontSize: 12,
+      color: colors.textSecondary,
+    },
+    toolbarActions: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    toolBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    toolBtnText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    toolBtnMuted: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      backgroundColor: `${colors.outflow}15`,
+      borderWidth: 1,
+      borderColor: `${colors.outflow}30`,
+    },
+    toolBtnTextClear: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.outflow,
+    },
+    toolBtnDanger: {
+      backgroundColor: colors.outflow,
+      borderColor: colors.outflow,
+    },
+    toolBtnTextDanger: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: '#FFFFFF',
+    },
+    toolBtnCancel: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+    },
+    toolBtnTextCancel: {
+      fontSize: 11,
+      color: colors.textMuted,
+    },
+    listContent: {
+      paddingBottom: 60,
+    },
+    listContentEmpty: {
+      flexGrow: 1,
+      justifyContent: 'center',
+    },
+    txRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      backgroundColor: colors.card,
+      padding: 12,
+      borderRadius: 12,
+      marginBottom: 8,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    txRowSelected: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primaryMuted,
+    },
+    leftCol: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    checkCol: {
+      marginRight: 8,
+    },
+    iconBox: {
+      width: 38,
+      height: 38,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+    metaCol: {
+      flex: 1,
+      marginRight: 8,
+    },
+    titleRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+    },
+    catDropdownPill: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    catName: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textPrimary,
+    },
+    actBadge: {
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      borderRadius: 4,
+    },
+    actBadgeText: {
+      fontSize: 9,
+      fontWeight: '700',
+    },
+    notesText: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    subMetaRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      marginTop: 3,
+      flexWrap: 'wrap',
+    },
+    dateText: {
+      fontSize: 10,
+      color: colors.textMuted,
+    },
+    accountDot: {
+      fontSize: 10,
+      color: colors.textMuted,
+      marginHorizontal: 4,
+    },
+    accountText: {
+      fontSize: 10,
+      color: colors.textMuted,
+      maxWidth: 90,
+    },
+    autoBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.primaryMuted,
+      paddingHorizontal: 5,
+      paddingVertical: 1,
+      borderRadius: 4,
+      marginLeft: 6,
+      borderWidth: 1,
+      borderColor: `${colors.primary}35`,
+    },
+    autoBadgeText: {
+      fontSize: 8,
+      fontWeight: '800',
+      color: colors.primary,
+    },
+    rightCol: {
+      alignItems: 'flex-end',
+      justifyContent: 'center',
+    },
+    amountText: {
+      fontSize: 14,
+      fontWeight: '700',
+    },
+    deleteBtn: {
+      padding: 4,
+      marginTop: 4,
+    },
+    emptyContainer: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 40,
+      paddingHorizontal: 20,
+    },
+    emptyIconCircle: {
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: colors.surface,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 12,
+    },
+    emptyTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+      marginBottom: 4,
+    },
+    emptySubtitle: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      textAlign: 'center',
+      lineHeight: 18,
+      marginBottom: 16,
+    },
+    emptyAddBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.primary,
+      paddingHorizontal: 16,
+      paddingVertical: 9,
+      borderRadius: 10,
+    },
+    emptyAddBtnText: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.primaryText,
+    },
+  });

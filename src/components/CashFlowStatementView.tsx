@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../theme/colors';
+import { ThemePalette } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { CashFlowStatement, AccountingActivity } from '../types/transaction';
 import { formatCurrency, getActivityConfig } from '../utils/formatters';
 import { useTransactions } from '../context/TransactionContext';
@@ -15,6 +16,8 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
   statement,
   periodLabel,
 }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
   const { currency } = useTransactions();
   const [expandedSection, setExpandedSection] = useState<AccountingActivity | null>('operating');
 
@@ -53,7 +56,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
           <Ionicons
             name={isExpanded ? 'chevron-up' : 'chevron-down'}
             size={20}
-            color={Colors.textSecondary}
+            color={colors.textSecondary}
           />
         </TouchableOpacity>
 
@@ -61,14 +64,14 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
         <View style={styles.summaryBar}>
           <View style={styles.summaryItem}>
             <Text style={styles.summaryItemLabel}>Inflow (+)</Text>
-            <Text style={[styles.summaryItemValue, { color: Colors.inflow }]}>
+            <Text style={[styles.summaryItemValue, { color: colors.inflow }]}>
               {formatCurrency(inflows, currency)}
             </Text>
           </View>
           <View style={styles.verticalDivider} />
           <View style={styles.summaryItem}>
             <Text style={styles.summaryItemLabel}>Outflow (-)</Text>
-            <Text style={[styles.summaryItemValue, { color: Colors.outflow }]}>
+            <Text style={[styles.summaryItemValue, { color: colors.outflow }]}>
               {formatCurrency(outflows, currency)}
             </Text>
           </View>
@@ -78,7 +81,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
             <Text
               style={[
                 styles.summaryItemValue,
-                { color: isNetPositive ? Colors.inflow : Colors.outflow, fontWeight: '700' },
+                { color: isNetPositive ? colors.inflow : colors.outflow, fontWeight: '700' },
               ]}
             >
               {formatCurrency(net, currency, true)}
@@ -101,7 +104,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
                       <View
                         style={[
                           styles.itemDot,
-                          { backgroundColor: isItemIncome ? Colors.inflow : Colors.outflow },
+                          { backgroundColor: isItemIncome ? colors.inflow : colors.outflow },
                         ]}
                       />
                       <Text style={styles.itemName}>{item.categoryName}</Text>
@@ -109,7 +112,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
                     <Text
                       style={[
                         styles.itemAmount,
-                        { color: isItemIncome ? Colors.inflow : Colors.textPrimary },
+                        { color: isItemIncome ? colors.inflow : colors.textPrimary },
                       ]}
                     >
                       {isItemIncome ? '+' : '-'}
@@ -178,7 +181,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
             <Text
               style={[
                 styles.formulaPillVal,
-                { color: statement.netOperating >= 0 ? Colors.inflow : Colors.outflow },
+                { color: statement.netOperating >= 0 ? colors.inflow : colors.outflow },
               ]}
             >
               {formatCurrency(statement.netOperating, currency, true)}
@@ -190,7 +193,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
             <Text
               style={[
                 styles.formulaPillVal,
-                { color: statement.netInvesting >= 0 ? Colors.inflow : Colors.outflow },
+                { color: statement.netInvesting >= 0 ? colors.inflow : colors.outflow },
               ]}
             >
               {formatCurrency(statement.netInvesting, currency, true)}
@@ -202,7 +205,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
             <Text
               style={[
                 styles.formulaPillVal,
-                { color: statement.netFinancing >= 0 ? Colors.inflow : Colors.outflow },
+                { color: statement.netFinancing >= 0 ? colors.inflow : colors.outflow },
               ]}
             >
               {formatCurrency(statement.netFinancing, currency, true)}
@@ -215,7 +218,7 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
           <Text
             style={[
               styles.netCashResultAmount,
-              { color: statement.netCashFlow >= 0 ? Colors.inflow : Colors.outflow },
+              { color: statement.netCashFlow >= 0 ? colors.inflow : colors.outflow },
             ]}
           >
             {formatCurrency(statement.netCashFlow, currency, true)}
@@ -227,227 +230,227 @@ export const CashFlowStatementView: React.FC<CashFlowStatementViewProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  banner: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 6,
-    marginBottom: 16,
-    backgroundColor: Colors.surface,
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  bannerTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  bannerSubtitle: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    marginTop: 2,
-  },
-  statementBadge: {
-    backgroundColor: Colors.primaryMuted,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  statementBadgeText: {
-    fontSize: 10,
-    fontWeight: '700',
-    color: Colors.primary,
-    textTransform: 'uppercase',
-  },
-  sectionCard: {
-    backgroundColor: Colors.card,
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  headerLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  badgePill: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-    marginRight: 10,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  activityTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  activitySubtitle: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 1,
-  },
-  summaryBar: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    marginTop: 14,
-    alignItems: 'center',
-  },
-  summaryItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  summaryItemLabel: {
-    fontSize: 10,
-    fontWeight: '600',
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  },
-  summaryItemValue: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  verticalDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: Colors.cardBorder,
-  },
-  itemsContainer: {
-    marginTop: 14,
-    borderTopWidth: 1,
-    borderTopColor: Colors.cardBorder,
-    paddingTop: 12,
-  },
-  itemsHeader: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  noItemsText: {
-    fontSize: 12,
-    color: Colors.textMuted,
-    fontStyle: 'italic',
-    paddingVertical: 4,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 6,
-  },
-  itemLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  itemDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    marginRight: 8,
-  },
-  itemName: {
-    fontSize: 13,
-    color: Colors.textPrimary,
-  },
-  itemAmount: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  bottomLineCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 16,
-    padding: 18,
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-    marginBottom: 16,
-  },
-  bottomLineHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  bottomLineTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  reconciliationFormula: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.primary,
-  },
-  reconciliationRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  formulaPill: {
-    flex: 1,
-    backgroundColor: Colors.card,
-    borderRadius: 8,
-    paddingVertical: 6,
-    paddingHorizontal: 8,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  formulaPillLabel: {
-    fontSize: 9,
-    fontWeight: '600',
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-  },
-  formulaPillVal: {
-    fontSize: 11,
-    fontWeight: '700',
-    marginTop: 2,
-  },
-  mathSymbol: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textMuted,
-    marginHorizontal: 4,
-  },
-  netCashResultRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderTopColor: Colors.cardBorder,
-    paddingTop: 12,
-  },
-  netCashResultLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  netCashResultAmount: {
-    fontSize: 20,
-    fontWeight: '800',
-  },
-});
+const getStyles = (colors: ThemePalette) =>
+  StyleSheet.create({
+    container: {
+      flex: 1,
+      paddingHorizontal: 16,
+    },
+    banner: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginTop: 6,
+      marginBottom: 16,
+      backgroundColor: colors.surface,
+      padding: 16,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    bannerTitle: {
+      fontSize: 16,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    bannerSubtitle: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      marginTop: 2,
+    },
+    statementBadge: {
+      backgroundColor: colors.primaryMuted,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+    },
+    statementBadgeText: {
+      fontSize: 10,
+      fontWeight: '700',
+      color: colors.primary,
+    },
+    sectionCard: {
+      backgroundColor: colors.card,
+      borderRadius: 16,
+      padding: 16,
+      marginBottom: 14,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    headerLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flex: 1,
+    },
+    badgePill: {
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+      marginRight: 10,
+    },
+    badgeText: {
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    activityTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    activitySubtitle: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      marginTop: 1,
+    },
+    summaryBar: {
+      flexDirection: 'row',
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      marginTop: 14,
+      alignItems: 'center',
+    },
+    summaryItem: {
+      flex: 1,
+      alignItems: 'center',
+    },
+    summaryItemLabel: {
+      fontSize: 10,
+      fontWeight: '600',
+      color: colors.textMuted,
+      textTransform: 'uppercase',
+      marginBottom: 2,
+    },
+    summaryItemValue: {
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    verticalDivider: {
+      width: 1,
+      height: 24,
+      backgroundColor: colors.cardBorder,
+    },
+    itemsContainer: {
+      marginTop: 14,
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+      paddingTop: 12,
+    },
+    itemsHeader: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: colors.textMuted,
+      textTransform: 'uppercase',
+      marginBottom: 8,
+    },
+    noItemsText: {
+      fontSize: 12,
+      color: colors.textMuted,
+      fontStyle: 'italic',
+      paddingVertical: 4,
+    },
+    itemRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingVertical: 6,
+    },
+    itemLeft: {
+      flexDirection: 'row',
+      alignItems: 'center',
+    },
+    itemDot: {
+      width: 6,
+      height: 6,
+      borderRadius: 3,
+      marginRight: 8,
+    },
+    itemName: {
+      fontSize: 13,
+      color: colors.textPrimary,
+    },
+    itemAmount: {
+      fontSize: 13,
+      fontWeight: '600',
+    },
+    bottomLineCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 16,
+      padding: 18,
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+      marginBottom: 16,
+    },
+    bottomLineHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 12,
+    },
+    bottomLineTitle: {
+      fontSize: 15,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    reconciliationFormula: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    reconciliationRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 14,
+    },
+    formulaPill: {
+      flex: 1,
+      backgroundColor: colors.card,
+      borderRadius: 8,
+      paddingVertical: 6,
+      paddingHorizontal: 8,
+      alignItems: 'center',
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    formulaPillLabel: {
+      fontSize: 9,
+      fontWeight: '600',
+      color: colors.textMuted,
+      textTransform: 'uppercase',
+    },
+    formulaPillVal: {
+      fontSize: 11,
+      fontWeight: '700',
+      marginTop: 2,
+    },
+    mathSymbol: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textMuted,
+      marginHorizontal: 4,
+    },
+    netCashResultRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderTopWidth: 1,
+      borderTopColor: colors.cardBorder,
+      paddingTop: 12,
+    },
+    netCashResultLabel: {
+      fontSize: 14,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    netCashResultAmount: {
+      fontSize: 20,
+      fontWeight: '800',
+    },
+  });

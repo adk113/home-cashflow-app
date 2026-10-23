@@ -20,7 +20,7 @@ import { createPendingTransactionFromSms } from '../utils/smsParser';
 import { smsSyncService, DEFAULT_SOURCE_CONFIG, SyncResult } from '../services/smsSyncService';
 import { useAuth } from './AuthContext';
 
-const CURRENCY_STORAGE_KEY = '@cashflow_selected_currency_v1';
+const CURRENCY_STORAGE_KEY = '@cashflow_selected_currency_v2';
 
 interface TransactionContextType {
   transactions: Transaction[];
@@ -44,6 +44,7 @@ interface TransactionContextType {
     sourceAccount?: string;
     sourceApp?: MessageSourceApp;
     detectedUpiApp?: string;
+    rawSms?: string;
   }) => Promise<void>;
   updateTransaction: (tx: Transaction) => Promise<void>;
   deleteTransaction: (id: string) => Promise<void>;
@@ -62,10 +63,12 @@ interface TransactionContextType {
   setAutoPostToLedger: (enabled: boolean) => Promise<void>;
   updateMessageSourceConfig: (newConfig: Partial<MessageSourceConfig>) => Promise<void>;
   syncSmsNow: () => Promise<SyncResult>;
-  batchImportSms: (text: string, forcedSource?: MessageSourceApp) => Promise<number>;
+  batchImportSms: (text: string) => Promise<number>;
   checkMessagePermissions: () => Promise<{ smsPermission: boolean; notificationAccess: boolean }>;
   openNotificationSettings: () => Promise<void>;
   requestSmsPermission: () => Promise<boolean>;
+  getCrashLogs: () => Promise<string>;
+  clearCrashLogs: () => Promise<void>;
   refreshData: () => Promise<void>;
   resetToSampleData?: () => Promise<void>;
 }
@@ -121,6 +124,56 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     loadData();
   }, [loadData]);
 
+  // Non-blocking background worker: Drain native raw SMS queue after app has mounted
+  useEffect(() => {
+    if (isLoading) return;
+
+    let isMounted = true;
+    const drainTimer = setTimeout(async () => {
+      try {
+        const bgResult = await smsSyncService.drainPendingRawNativeQueue(pendingSms, transactions);
+        if (!isMounted || bgResult.newItems.length === 0) return;
+
+        if (messageSourceConfig.autoPostToLedger) {
+          const newTxs: Transaction[] = [];
+          for (const item of bgResult.newItems) {
+            const cat = categoriesMap.get(item.suggestedCategoryId);
+            const newTx: Transaction = {
+              id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+              amount: item.amount,
+              type: item.type,
+              activity: cat?.activity || item.activity,
+              categoryId: item.suggestedCategoryId,
+              date: item.date,
+              notes: item.body.length > 80 ? `${item.body.slice(0, 80)}...` : item.body,
+              entryMode: 'AUTOMATED',
+              sourceAccount: item.sourceAccount,
+              sourceApp: 'auto',
+              detectedUpiApp: item.detectedUpiApp,
+              rawSms: item.body,
+              createdAt: Date.now(),
+            };
+            await TransactionDao.addTransaction(newTx);
+            newTxs.push(newTx);
+          }
+          setTransactions((prev) => [...newTxs, ...prev]);
+        } else {
+          for (const item of bgResult.newItems) {
+            await TransactionDao.savePendingSms(item);
+          }
+          setPendingSms((prev) => [...bgResult.newItems, ...prev]);
+        }
+      } catch (e) {
+        smsSyncService.logSilentCrash('backgroundDrain', e);
+      }
+    }, 2000);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(drainTimer);
+    };
+  }, [isLoading, messageSourceConfig.autoPostToLedger]);
+
   const categoriesMap = useMemo(() => {
     const map = new Map<string, Category>();
     categories.forEach((cat) => map.set(cat.id, cat));
@@ -155,6 +208,7 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     sourceAccount?: string;
     sourceApp?: MessageSourceApp;
     detectedUpiApp?: string;
+    rawSms?: string;
   }) => {
     const newTx: Transaction = {
       id: `tx-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
@@ -168,8 +222,9 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
       entryMode: data.entryMode || 'MANUAL',
       sourceAccount: data.sourceAccount || 'Cash',
       createdAt: Date.now(),
-      sourceApp: data.sourceApp,
+      sourceApp: data.sourceApp || 'auto',
       detectedUpiApp: data.detectedUpiApp,
+      rawSms: data.rawSms,
     };
 
     await TransactionDao.addTransaction(newTx);
@@ -220,18 +275,19 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     const cat = categoriesMap.get(chosenCategoryId);
     const chosenActivity = overrides?.activity || cat?.activity || found.activity;
 
-    // Create automated transaction
+    // Create automated transaction with FULL raw SMS preserved for audit
     await addTransaction({
       amount: found.amount,
       type: found.type,
       activity: chosenActivity,
       categoryId: chosenCategoryId,
       date: found.date,
-      notes: `${found.body.slice(0, 70)}...`,
+      notes: found.body.length > 80 ? `${found.body.slice(0, 80)}...` : found.body,
       entryMode: 'AUTOMATED',
       sourceAccount: found.sourceAccount,
-      sourceApp: found.sourceApp,
+      sourceApp: 'auto',
       detectedUpiApp: found.detectedUpiApp,
+      rawSms: found.body,
     });
 
     // Remove from pending queue
@@ -253,11 +309,12 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
           activity: cat?.activity || detected.activity,
           categoryId: detected.suggestedCategoryId,
           date: detected.date,
-          notes: `${detected.body.slice(0, 70)}...`,
+          notes: detected.body.length > 80 ? `${detected.body.slice(0, 80)}...` : detected.body,
           entryMode: 'AUTOMATED',
           sourceAccount: detected.sourceAccount,
-          sourceApp: detected.sourceApp,
+          sourceApp: 'auto',
           detectedUpiApp: detected.detectedUpiApp,
+          rawSms: detected.body,
         });
       } else {
         await addPendingSms(detected);
@@ -267,9 +324,9 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     return null;
   };
 
-  // Message Source & SMS Sync Center Actions
+  // Unified Message Source & Smart Merge Actions
   const setMessageSource = async (source: MessageSourceApp) => {
-    const updated = await smsSyncService.setSelectedSource(source);
+    const updated = await smsSyncService.updateConfig({ selectedSource: 'auto' });
     setMessageSourceConfigState(updated);
   };
 
@@ -290,7 +347,7 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
       if (result.items && result.items.length > 0) {
         if (messageSourceConfig.autoPostToLedger) {
-          // Immediately post detected SMS transactions directly into the ledger!
+          // Immediately post detected SMS transactions directly into the ledger with full raw SMS
           const newTxs: Transaction[] = [];
           for (const item of result.items) {
             const chosenCategoryId = item.suggestedCategoryId;
@@ -305,11 +362,12 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
               activity: chosenActivity,
               categoryId: chosenCategoryId,
               date: item.date,
-              notes: `${item.body.slice(0, 80)}`,
+              notes: item.body.length > 80 ? `${item.body.slice(0, 80)}...` : item.body,
               entryMode: 'AUTOMATED',
               sourceAccount: item.sourceAccount,
-              sourceApp: item.sourceApp,
+              sourceApp: 'auto',
               detectedUpiApp: item.detectedUpiApp,
+              rawSms: item.body, // Complete unedited string for audit visibility
               createdAt: Date.now(),
             };
             await TransactionDao.addTransaction(newTx);
@@ -333,8 +391,8 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
     }
   };
 
-  const batchImportSms = async (text: string, forcedSource?: MessageSourceApp): Promise<number> => {
-    const { items } = smsSyncService.parseBatchText(text, pendingSms, transactions, forcedSource);
+  const batchImportSms = async (text: string): Promise<number> => {
+    const { items } = smsSyncService.parseBatchText(text, pendingSms, transactions);
     if (items.length > 0) {
       if (messageSourceConfig.autoPostToLedger) {
         const newTxs: Transaction[] = [];
@@ -348,11 +406,12 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
             activity: cat?.activity || item.activity,
             categoryId: item.suggestedCategoryId,
             date: item.date,
-            notes: `${item.body.slice(0, 80)}`,
+            notes: item.body.length > 80 ? `${item.body.slice(0, 80)}...` : item.body,
             entryMode: 'AUTOMATED',
             sourceAccount: item.sourceAccount,
-            sourceApp: item.sourceApp,
+            sourceApp: 'auto',
             detectedUpiApp: item.detectedUpiApp,
+            rawSms: item.body,
             createdAt: Date.now(),
           };
           await TransactionDao.addTransaction(newTx);
@@ -379,6 +438,14 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
 
   const requestSmsPermission = async () => {
     return smsSyncService.requestSmsPermission();
+  };
+
+  const getCrashLogs = async () => {
+    return smsSyncService.getCrashLogs();
+  };
+
+  const clearCrashLogs = async () => {
+    return smsSyncService.clearCrashLogs();
   };
 
   const resetToSampleData = async () => {
@@ -419,6 +486,8 @@ export const TransactionProvider: React.FC<{ children: React.ReactNode }> = ({ c
         checkMessagePermissions,
         openNotificationSettings,
         requestSmsPermission,
+        getCrashLogs,
+        clearCrashLogs,
         refreshData: loadData,
         resetToSampleData,
       }}

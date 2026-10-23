@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import {
   Alert,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors } from '../theme/colors';
+import { ThemePalette } from '../theme/colors';
+import { useTheme } from '../context/ThemeContext';
 import { Category, AccountingActivity, TransactionType, Currency, EntryMode } from '../types/transaction';
 import { formatDatePretty, getActivityConfig } from '../utils/formatters';
 import { getTodayIso } from '../utils/dateFilters';
@@ -78,6 +79,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const { colors } = useTheme();
+  const styles = useMemo(() => getStyles(colors), [colors]);
+
   const [type, setType] = useState<TransactionType>(initialType);
   const [amountStr, setAmountStr] = useState<string>(initialAmount ? String(initialAmount) : '');
   const [selectedCatId, setSelectedCatId] = useState<string>(initialCategoryId || '');
@@ -224,7 +228,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </Text>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-              <Ionicons name="close" size={20} color={Colors.textSecondary} />
+              <Ionicons name="close" size={20} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -238,7 +242,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 <Ionicons
                   name="arrow-up"
                   size={16}
-                  color={type === 'expense' ? '#FFF' : Colors.textSecondary}
+                  color={type === 'expense' ? '#FFF' : colors.textSecondary}
                   style={{ marginRight: 6 }}
                 />
                 <Text style={[styles.typeBtnText, type === 'expense' && styles.typeBtnTextActive]}>
@@ -253,7 +257,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 <Ionicons
                   name="arrow-down"
                   size={16}
-                  color={type === 'income' ? '#0B0F19' : Colors.textSecondary}
+                  color={type === 'income' ? '#FFFFFF' : colors.textSecondary}
                   style={{ marginRight: 6 }}
                 />
                 <Text style={[styles.typeBtnText, type === 'income' && styles.typeBtnTextActiveIncome]}>
@@ -264,12 +268,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
             {/* Amount Field */}
             <View style={styles.amountFieldWrap}>
-              <Text style={styles.dollarSymbol}>{currency?.symbol || '$'}</Text>
+              <Text style={styles.dollarSymbol}>{currency?.symbol || '₹'}</Text>
               <TextInput
                 style={styles.amountInput}
                 keyboardType="numeric"
                 placeholder="0.00"
-                placeholderTextColor={Colors.textMuted}
+                placeholderTextColor={colors.placeholder}
                 value={amountStr}
                 onChangeText={setAmountStr}
                 autoFocus={!initialAmount}
@@ -283,7 +287,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 <Ionicons
                   name={entryMode === 'AUTOMATED' ? 'flash' : 'create'}
                   size={10}
-                  color={entryMode === 'AUTOMATED' ? Colors.primary : Colors.textSecondary}
+                  color={entryMode === 'AUTOMATED' ? colors.primary : colors.textSecondary}
                   style={{ marginRight: 3 }}
                 />
                 <Text style={[styles.modeIndicatorText, entryMode === 'AUTOMATED' ? styles.textAuto : styles.textManual]}>
@@ -312,7 +316,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   <Ionicons
                     name="wallet-outline"
                     size={16}
-                    color={entryMode === 'MANUAL' ? Colors.primary : Colors.textSecondary}
+                    color={entryMode === 'MANUAL' ? colors.primary : colors.textSecondary}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -324,7 +328,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   </Text>
                 </View>
                 {entryMode === 'MANUAL' && (
-                  <Ionicons name="checkmark-circle" size={16} color={Colors.primary} />
+                  <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
                 )}
               </TouchableOpacity>
 
@@ -345,7 +349,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   <Ionicons
                     name="flash"
                     size={15}
-                    color={entryMode === 'AUTOMATED' ? Colors.primary : Colors.textSecondary}
+                    color={entryMode === 'AUTOMATED' ? colors.primary : colors.textSecondary}
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -357,7 +361,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   </Text>
                 </View>
                 {entryMode === 'AUTOMATED' && (
-                  <Ionicons name="checkmark-circle" size={16} color={Colors.primary} />
+                  <Ionicons name="checkmark-circle" size={16} color={colors.primary} />
                 )}
               </TouchableOpacity>
             </View>
@@ -394,7 +398,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <TextInput
               style={styles.accountCustomInput}
               placeholder="Or type custom account (e.g. Axis Bank, HDFC XX4521, GPay UPI)"
-              placeholderTextColor={Colors.textMuted}
+              placeholderTextColor={colors.placeholder}
               value={sourceAccount}
               onChangeText={(txt) => {
                 setSourceAccount(txt);
@@ -441,19 +445,19 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     <View
                       style={[
                         styles.catIconCircle,
-                        { backgroundColor: isSelected ? cat.color : Colors.surface },
+                        { backgroundColor: isSelected ? cat.color : colors.surface },
                       ]}
                     >
                       <Ionicons
                         name={(cat.icon as any) || 'pricetag-outline'}
                         size={16}
-                        color={isSelected ? '#0B0F19' : cat.color}
+                        color={isSelected ? colors.primaryText : cat.color}
                       />
                     </View>
                     <Text
                       style={[
                         styles.categoryCardName,
-                        isSelected && { color: Colors.textPrimary, fontWeight: '700' },
+                        isSelected && { color: colors.textPrimary, fontWeight: '700' },
                       ]}
                       numberOfLines={1}
                     >
@@ -473,7 +477,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 activeOpacity={0.75}
               >
                 <View style={styles.dateIconCircle}>
-                  <Ionicons name="calendar" size={16} color={Colors.primary} />
+                  <Ionicons name="calendar" size={16} color={colors.primary} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.datePickerText}>{formatDatePretty(dateStr)}</Text>
@@ -481,7 +485,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 </View>
                 <View style={styles.dateChangeBadge}>
                   <Text style={styles.dateChangeText}>Calendar</Text>
-                  <Ionicons name="chevron-down" size={12} color={Colors.primary} style={{ marginLeft: 3 }} />
+                  <Ionicons name="chevron-down" size={12} color={colors.primary} style={{ marginLeft: 3 }} />
                 </View>
               </TouchableOpacity>
 
@@ -506,7 +510,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             <TextInput
               style={styles.notesInput}
               placeholder="e.g. Swiggy, Salary payroll, Metro card refill..."
-              placeholderTextColor={Colors.textMuted}
+              placeholderTextColor={colors.placeholder}
               value={notes}
               onChangeText={setNotes}
             />
@@ -532,382 +536,383 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   );
 };
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.7)',
-    justifyContent: 'flex-end',
-  },
-  sheetContainer: {
-    backgroundColor: Colors.card,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '90%',
-    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: Colors.cardBorder,
-  },
-  sheetTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  sheetSubtitle: {
-    fontSize: 11,
-    color: Colors.primary,
-    fontWeight: '600',
-    marginTop: 2,
-  },
-  closeBtn: {
-    padding: 6,
-  },
-  scrollContent: {
-    padding: 20,
-  },
-  typeToggleRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginBottom: 20,
-  },
-  typeBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    borderRadius: 12,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  typeBtnActiveExpense: {
-    backgroundColor: Colors.outflow,
-    borderColor: Colors.outflow,
-  },
-  typeBtnActiveIncome: {
-    backgroundColor: Colors.inflow,
-    borderColor: Colors.inflow,
-  },
-  typeBtnText: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  typeBtnTextActive: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
-  typeBtnTextActiveIncome: {
-    color: '#0B0F19',
-    fontWeight: '700',
-  },
-  amountFieldWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    marginBottom: 16,
-  },
-  dollarSymbol: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: Colors.textMuted,
-    marginRight: 6,
-  },
-  amountInput: {
-    fontSize: 42,
-    fontWeight: '800',
-    color: Colors.textPrimary,
-    minWidth: 140,
-    textAlign: 'center',
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  sectionHint: {
-    fontSize: 11,
-    color: Colors.textMuted,
-  },
-  modeIndicatorBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 6,
-    borderWidth: 1,
-  },
-  badgeAuto: {
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
-    borderColor: 'rgba(56, 189, 248, 0.3)',
-  },
-  badgeManual: {
-    backgroundColor: 'rgba(148, 163, 184, 0.12)',
-    borderColor: 'rgba(148, 163, 184, 0.25)',
-  },
-  modeIndicatorText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.4,
-  },
-  textAuto: {
-    color: Colors.primary,
-  },
-  textManual: {
-    color: Colors.textSecondary,
-  },
-  modeTabsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-  },
-  modeTab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: 10,
-    borderRadius: 12,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  modeTabActiveManual: {
-    borderColor: Colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.08)',
-  },
-  modeTabActiveAuto: {
-    borderColor: Colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
-  },
-  modeTabIconBox: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: Colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  modeTabIconBoxActiveManual: {
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-  },
-  modeTabIconBoxActiveAuto: {
-    backgroundColor: 'rgba(56, 189, 248, 0.2)',
-  },
-  modeTabTitle: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Colors.textSecondary,
-  },
-  modeTabTitleActive: {
-    color: Colors.textPrimary,
-  },
-  modeTabSubtitle: {
-    fontSize: 10,
-    color: Colors.textMuted,
-    marginTop: 1,
-  },
-  chipsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 8,
-  },
-  accountChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  accountChipSelected: {
-    borderColor: Colors.primary,
-    backgroundColor: 'rgba(56, 189, 248, 0.15)',
-  },
-  accountChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-  },
-  accountChipTextSelected: {
-    color: Colors.primary,
-    fontWeight: '700',
-  },
-  accountCustomInput: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    color: Colors.textPrimary,
-    fontSize: 13,
-    marginBottom: 16,
-  },
-  activityCard: {
-    backgroundColor: Colors.surface,
-    borderRadius: 12,
-    padding: 12,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  activityCardHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  activityCardLabel: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.textMuted,
-    textTransform: 'uppercase',
-  },
-  actPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: 6,
-  },
-  actPillCode: {
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  activityCardDesc: {
-    fontSize: 11,
-    color: Colors.textSecondary,
-    marginTop: 4,
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Colors.textSecondary,
-    marginBottom: 8,
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  categoriesGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  categoryCard: {
-    width: '48%',
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-  },
-  catIconCircle: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 8,
-  },
-  categoryCardName: {
-    fontSize: 12,
-    color: Colors.textSecondary,
-    flex: 1,
-  },
-  dateRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginBottom: 16,
-  },
-  datePickerBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  dateIconCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: 'rgba(56, 189, 248, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 10,
-  },
-  datePickerText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.textPrimary,
-  },
-  dateSubtext: {
-    fontSize: 11,
-    color: Colors.textMuted,
-    marginTop: 1,
-  },
-  dateChangeBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(56, 189, 248, 0.1)',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 6,
-  },
-  dateChangeText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Colors.primary,
-  },
-  todayBtn: {
-    backgroundColor: Colors.primaryMuted,
-    paddingHorizontal: 16,
-    borderRadius: 10,
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  todayBtnText: {
-    color: Colors.primary,
-    fontWeight: '600',
-    fontSize: 13,
-  },
-  notesInput: {
-    backgroundColor: Colors.surface,
-    borderWidth: 1,
-    borderColor: Colors.cardBorder,
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    color: Colors.textPrimary,
-    fontSize: 14,
-    marginBottom: 20,
-  },
-  saveBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: 12,
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  saveBtnText: {
-    color: '#0B0F19',
-    fontSize: 15,
-    fontWeight: '700',
-  },
-});
+const getStyles = (colors: ThemePalette) =>
+  StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: colors.overlay,
+      justifyContent: 'flex-end',
+    },
+    sheetContainer: {
+      backgroundColor: colors.card,
+      borderTopLeftRadius: 24,
+      borderTopRightRadius: 24,
+      maxHeight: '90%',
+      paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    sheetHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingTop: 16,
+      paddingBottom: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.cardBorder,
+    },
+    sheetTitle: {
+      fontSize: 18,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    sheetSubtitle: {
+      fontSize: 11,
+      color: colors.primary,
+      fontWeight: '600',
+      marginTop: 2,
+    },
+    closeBtn: {
+      padding: 6,
+    },
+    scrollContent: {
+      padding: 20,
+    },
+    typeToggleRow: {
+      flexDirection: 'row',
+      gap: 12,
+      marginBottom: 20,
+    },
+    typeBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 12,
+      borderRadius: 12,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    typeBtnActiveExpense: {
+      backgroundColor: colors.outflow,
+      borderColor: colors.outflow,
+    },
+    typeBtnActiveIncome: {
+      backgroundColor: colors.inflow,
+      borderColor: colors.inflow,
+    },
+    typeBtnText: {
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    typeBtnTextActive: {
+      color: '#FFFFFF',
+      fontWeight: '700',
+    },
+    typeBtnTextActiveIncome: {
+      color: '#FFFFFF',
+      fontWeight: '700',
+    },
+    amountFieldWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 10,
+      marginBottom: 16,
+    },
+    dollarSymbol: {
+      fontSize: 32,
+      fontWeight: '700',
+      color: colors.textMuted,
+      marginRight: 6,
+    },
+    amountInput: {
+      fontSize: 42,
+      fontWeight: '800',
+      color: colors.textPrimary,
+      minWidth: 140,
+      textAlign: 'center',
+    },
+    sectionHeaderRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      marginBottom: 8,
+    },
+    sectionHint: {
+      fontSize: 11,
+      color: colors.textMuted,
+    },
+    modeIndicatorBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingHorizontal: 7,
+      paddingVertical: 2,
+      borderRadius: 6,
+      borderWidth: 1,
+    },
+    badgeAuto: {
+      backgroundColor: colors.primaryMuted,
+      borderColor: `${colors.primary}35`,
+    },
+    badgeManual: {
+      backgroundColor: `${colors.textMuted}15`,
+      borderColor: `${colors.textMuted}30`,
+    },
+    modeIndicatorText: {
+      fontSize: 10,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+    },
+    textAuto: {
+      color: colors.primary,
+    },
+    textManual: {
+      color: colors.textSecondary,
+    },
+    modeTabsRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginBottom: 16,
+    },
+    modeTab: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      padding: 10,
+      borderRadius: 12,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    modeTabActiveManual: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primaryMuted,
+    },
+    modeTabActiveAuto: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primaryMuted,
+    },
+    modeTabIconBox: {
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      backgroundColor: colors.card,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 8,
+    },
+    modeTabIconBoxActiveManual: {
+      backgroundColor: colors.primaryMuted,
+    },
+    modeTabIconBoxActiveAuto: {
+      backgroundColor: colors.primaryMuted,
+    },
+    modeTabTitle: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: colors.textSecondary,
+    },
+    modeTabTitleActive: {
+      color: colors.textPrimary,
+    },
+    modeTabSubtitle: {
+      fontSize: 10,
+      color: colors.textMuted,
+      marginTop: 1,
+    },
+    chipsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 8,
+    },
+    accountChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    accountChipSelected: {
+      borderColor: colors.primary,
+      backgroundColor: colors.primaryMuted,
+    },
+    accountChipText: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+    },
+    accountChipTextSelected: {
+      color: colors.primary,
+      fontWeight: '700',
+    },
+    accountCustomInput: {
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.inputBorder,
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+      color: colors.textPrimary,
+      fontSize: 13,
+      marginBottom: 16,
+    },
+    activityCard: {
+      backgroundColor: colors.surface,
+      borderRadius: 12,
+      padding: 12,
+      marginBottom: 16,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    activityCardHeader: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+    },
+    activityCardLabel: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.textMuted,
+      textTransform: 'uppercase',
+    },
+    actPill: {
+      paddingHorizontal: 8,
+      paddingVertical: 3,
+      borderRadius: 6,
+    },
+    actPillCode: {
+      fontSize: 11,
+      fontWeight: '800',
+    },
+    activityCardDesc: {
+      fontSize: 11,
+      color: colors.textSecondary,
+      marginTop: 4,
+    },
+    sectionLabel: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: colors.textSecondary,
+      marginBottom: 8,
+      textTransform: 'uppercase',
+      letterSpacing: 0.5,
+    },
+    categoriesGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+      marginBottom: 16,
+    },
+    categoryCard: {
+      width: '48%',
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      padding: 10,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+    },
+    catIconCircle: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 8,
+    },
+    categoryCardName: {
+      fontSize: 12,
+      color: colors.textSecondary,
+      flex: 1,
+    },
+    dateRow: {
+      flexDirection: 'row',
+      gap: 10,
+      marginBottom: 16,
+    },
+    datePickerBtn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.surface,
+      borderWidth: 1,
+      borderColor: colors.cardBorder,
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+    },
+    dateIconCircle: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      backgroundColor: colors.primaryMuted,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginRight: 10,
+    },
+    datePickerText: {
+      fontSize: 13,
+      fontWeight: '700',
+      color: colors.textPrimary,
+    },
+    dateSubtext: {
+      fontSize: 11,
+      color: colors.textMuted,
+      marginTop: 1,
+    },
+    dateChangeBadge: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.primaryMuted,
+      paddingHorizontal: 8,
+      paddingVertical: 4,
+      borderRadius: 6,
+    },
+    dateChangeText: {
+      fontSize: 11,
+      fontWeight: '600',
+      color: colors.primary,
+    },
+    todayBtn: {
+      backgroundColor: colors.primaryMuted,
+      paddingHorizontal: 16,
+      borderRadius: 10,
+      justifyContent: 'center',
+      borderWidth: 1,
+      borderColor: colors.primary,
+    },
+    todayBtnText: {
+      color: colors.primary,
+      fontWeight: '600',
+      fontSize: 13,
+    },
+    notesInput: {
+      backgroundColor: colors.inputBg,
+      borderWidth: 1,
+      borderColor: colors.inputBorder,
+      borderRadius: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 10,
+      color: colors.textPrimary,
+      fontSize: 14,
+      marginBottom: 20,
+    },
+    saveBtn: {
+      backgroundColor: colors.primary,
+      borderRadius: 12,
+      paddingVertical: 14,
+      alignItems: 'center',
+    },
+    saveBtnText: {
+      color: colors.primaryText,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+  });

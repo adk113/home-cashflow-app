@@ -21,6 +21,9 @@ CREATE TABLE IF NOT EXISTS transactions (
   notes TEXT,
   entry_mode TEXT DEFAULT 'MANUAL',
   source_account TEXT DEFAULT 'Cash',
+  source_app TEXT,
+  detected_upi_app TEXT,
+  raw_sms TEXT,
   created_at INTEGER NOT NULL,
   FOREIGN KEY (category_id) REFERENCES categories (id)
 );
@@ -127,6 +130,15 @@ export const DEFAULT_CATEGORIES: Category[] = [
     type: 'expense',
     icon: 'tv-outline',
     color: '#F43F5E',
+    isDefault: true,
+  },
+  {
+    id: 'cat_uncategorized',
+    name: 'Uncategorized Expense',
+    activity: 'operating',
+    type: 'expense',
+    icon: 'help-circle-outline',
+    color: '#64748B',
     isDefault: true,
   },
 

@@ -1,12 +1,12 @@
 {
   "name": "home_cashflow_app",
-  "version": "1.0.0",
+  "version": "1.0.7",
   "main": "index.ts",
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
     "@expo/vector-icons": "^15.0.2",
     "@react-native-async-storage/async-storage": "2.2.0",
-    "expo": "~57.0.28",
+    "expo": "~57.0.31",
     "expo-font": "~57.0.4",
     "expo-sqlite": "~57.0.4",
     "expo-status-bar": "~57.0.1",
@@ -30,7 +30,7 @@
     "web": "expo start --web",
     "build": "expo export --platform web",
     "build:web": "expo export --platform web",
-    "serve": "node server.js"
+    "server": "node server.js"
   },
   "private": true
 }

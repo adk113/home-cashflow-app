@@ -90,6 +90,9 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
       if (!txCols.includes('detected_upi_app')) {
         this.db.execSync('ALTER TABLE transactions ADD COLUMN detected_upi_app TEXT;');
       }
+      if (!txCols.includes('raw_sms')) {
+        this.db.execSync('ALTER TABLE transactions ADD COLUMN raw_sms TEXT;');
+      }
 
       const smsInfo = this.db.getAllSync('PRAGMA table_info(pending_sms_queue);');
       const smsCols = smsInfo.map((col: any) => col.name);
@@ -109,15 +112,20 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
       console.warn('SQLite migration pragma check notice:', e);
     }
 
-    // Seed categories if empty
-    const existing = this.db.getAllSync('SELECT COUNT(*) as count FROM categories');
-    if (!existing || existing[0]?.count === 0) {
+    // Seed categories if empty or insert any missing default categories
+    try {
+      const existingRows = this.db.getAllSync('SELECT id FROM categories');
+      const existingIds = new Set(existingRows.map((r: any) => r.id));
       for (const cat of DEFAULT_CATEGORIES) {
-        this.db.runSync(
-          'INSERT INTO categories (id, name, activity, type, icon, color, is_default) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [cat.id, cat.name, cat.activity, cat.type, cat.icon, cat.color, 1]
-        );
+        if (!existingIds.has(cat.id)) {
+          this.db.runSync(
+            'INSERT OR REPLACE INTO categories (id, name, activity, type, icon, color, is_default) VALUES (?, ?, ?, ?, ?, ?, ?)',
+            [cat.id, cat.name, cat.activity, cat.type, cat.icon, cat.color, 1]
+          );
+        }
       }
+    } catch (e) {
+      console.warn('Categories check error:', e);
     }
   }
 
@@ -156,12 +164,13 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
       createdAt: Number(r.created_at),
       sourceApp: r.source_app || undefined,
       detectedUpiApp: r.detected_upi_app || undefined,
+      rawSms: r.raw_sms || undefined,
     }));
   }
 
   async insertTransaction(tx: Transaction): Promise<void> {
     this.db.runSync(
-      'INSERT INTO transactions (id, amount, type, activity, category_id, date, notes, entry_mode, source_account, created_at, source_app, detected_upi_app) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO transactions (id, amount, type, activity, category_id, date, notes, entry_mode, source_account, created_at, source_app, detected_upi_app, raw_sms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         tx.id,
         tx.amount,
@@ -175,13 +184,14 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
         tx.createdAt,
         tx.sourceApp || null,
         tx.detectedUpiApp || null,
+        tx.rawSms || null,
       ]
     );
   }
 
   async updateTransaction(tx: Transaction): Promise<void> {
     this.db.runSync(
-      'UPDATE transactions SET amount = ?, type = ?, activity = ?, category_id = ?, date = ?, notes = ?, entry_mode = ?, source_account = ?, source_app = ?, detected_upi_app = ? WHERE id = ?',
+      'UPDATE transactions SET amount = ?, type = ?, activity = ?, category_id = ?, date = ?, notes = ?, entry_mode = ?, source_account = ?, source_app = ?, detected_upi_app = ?, raw_sms = ? WHERE id = ?',
       [
         tx.amount,
         tx.type,
@@ -193,6 +203,7 @@ export class NativeSQLiteAdapter implements DatabaseAdapter {
         tx.sourceAccount || 'Cash',
         tx.sourceApp || null,
         tx.detectedUpiApp || null,
+        tx.rawSms || null,
         tx.id,
       ]
     );

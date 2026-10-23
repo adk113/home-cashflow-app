@@ -1,8 +1,8 @@
 import { Currency } from '../types/transaction';
 
 export const SUPPORTED_CURRENCIES: Currency[] = [
-  { code: 'USD', symbol: '$', name: 'US Dollar' },
   { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
+  { code: 'USD', symbol: '$', name: 'US Dollar' },
   { code: 'EUR', symbol: '€', name: 'Euro' },
   { code: 'GBP', symbol: '£', name: 'British Pound' },
   { code: 'CAD', symbol: 'CA$', name: 'Canadian Dollar' },
@@ -13,4 +13,4 @@ export const SUPPORTED_CURRENCIES: Currency[] = [
   { code: 'CHF', symbol: 'CHF', name: 'Swiss Franc' },
 ];
 
-export const DEFAULT_CURRENCY: Currency = SUPPORTED_CURRENCIES[0]; // USD
+export const DEFAULT_CURRENCY: Currency = SUPPORTED_CURRENCIES[0]; // Default: INR (Indian Rupee)

@@ -21,7 +21,8 @@ export function formatCurrency(
 
   let formattedNumber = '';
   try {
-    formattedNumber = new Intl.NumberFormat('en-US', {
+    const locale = currency.code === 'INR' ? 'en-IN' : 'en-US';
+    formattedNumber = new Intl.NumberFormat(locale, {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(abs);
@@ -81,7 +82,7 @@ export function getActivityConfig(activity: AccountingActivity): {
         code: 'CFO',
         color: '#10B981',
         badgeBg: 'rgba(16, 185, 129, 0.12)',
-        description: 'Regular income & daily household living expenses',
+        description: 'Daily living expenses & core income (Salary, Freelance)',
       };
     case 'investing':
       return {
@@ -89,7 +90,7 @@ export function getActivityConfig(activity: AccountingActivity): {
         code: 'CFI',
         color: '#8B5CF6',
         badgeBg: 'rgba(139, 92, 246, 0.12)',
-        description: 'Home upgrades, renovations & savings transfers',
+        description: 'Wealth assets, investments, stocks, mutual funds & real estate',
       };
     case 'financing':
       return {
@@ -97,7 +98,7 @@ export function getActivityConfig(activity: AccountingActivity): {
         code: 'CFF',
         color: '#F59E0B',
         badgeBg: 'rgba(245, 158, 11, 0.12)',
-        description: 'Mortgage payments, car loans & debt service',
+        description: 'Liabilities, loans, mortgages & credit card debt paydowns',
       };
   }
 }
